@@ -320,6 +320,63 @@
   .all-settled-banner .big-check { font-size: 2rem; margin-bottom: 6px; }
   .all-settled-banner .settled-text { font-weight: 700; color: var(--green); font-size: 1.05rem; }
 
+  /* Identity selector */
+  .identity-overlay {
+    position: fixed; inset: 0;
+    background: rgba(12,15,20,0.92); z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(8px);
+  }
+  .identity-overlay.hidden { display: none; }
+  .identity-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 36px; max-width: 420px; width: 90%;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5); text-align: center;
+  }
+  .identity-box .id-crest { font-size: 2.4rem; margin-bottom: 10px; filter: drop-shadow(0 0 12px rgba(232,183,49,0.3)); }
+  .identity-box h2 {
+    font-family: 'Playfair Display', serif; font-weight: 900;
+    color: var(--accent); font-size: 1.5rem; margin-bottom: 4px;
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  .identity-box .id-sub {
+    font-family: 'Cormorant Garamond', serif; font-size: 0.9rem;
+    color: var(--text-dim); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 20px;
+  }
+  .identity-box p { color: var(--text-dim); font-size: 0.92rem; margin-bottom: 16px; }
+  .identity-box select {
+    width: 100%; margin-bottom: 12px;
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 12px 14px; border-radius: var(--radius-sm);
+    font-family: inherit; font-size: 1rem; outline: none; cursor: pointer;
+  }
+  .identity-box .btn { width: 100%; padding: 12px; font-size: 1rem; }
+  .identity-box .id-guest {
+    margin-top: 12px; font-size: 0.82rem; color: var(--text-muted);
+    cursor: pointer; transition: color 0.2s;
+  }
+  .identity-box .id-guest:hover { color: var(--text-dim); }
+  .identity-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 16px; margin-bottom: 16px;
+  }
+  .identity-bar .ib-name {
+    font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 8px;
+  }
+  .identity-bar .ib-change {
+    font-size: 0.82rem; color: var(--text-muted); cursor: pointer;
+    background: none; border: 1px solid var(--border); padding: 4px 12px;
+    border-radius: var(--radius-sm); font-family: inherit; transition: all 0.2s;
+  }
+  .identity-bar .ib-change:hover { color: var(--text); border-color: var(--text-muted); }
+
+  /* Personal stat highlight */
+  .stat-item.personal {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, var(--surface) 0%, rgba(232,183,49,0.08) 100%);
+  }
+
   @media (max-width: 640px) {
     .header h1 { font-size: 1.9rem; }
     .section { padding: 16px; }
@@ -347,11 +404,34 @@
     <div class="divider-ornament">━━━ ✦ ━━━</div>
   </div>
 
+  <!-- Identity Selector -->
+  <div class="identity-overlay" id="identityOverlay">
+    <div class="identity-box">
+      <div class="id-crest">♠</div>
+      <h2>Almere Poker Club</h2>
+      <div class="id-sub">Welcome</div>
+      <p>Who's at the table?</p>
+      <select id="identitySelect"><option value="">Select your name...</option></select>
+      <button class="btn btn-primary" onclick="confirmIdentity()">Enter</button>
+      <div class="id-guest" onclick="skipIdentity()">Continue as guest</div>
+    </div>
+  </div>
+
+  <!-- Identity Bar -->
+  <div class="identity-bar" id="identityBar" style="display:none">
+    <div class="ib-name"><span>♠</span> Logged in as: <strong id="identityName"></strong></div>
+    <button class="ib-change" onclick="changeIdentity()">Switch Player</button>
+  </div>
+
   <div class="stats-bar">
     <div class="stat-item"><div class="stat-value" id="statPlayers">0</div><div class="stat-label">Players</div></div>
     <div class="stat-item"><div class="stat-value" id="statBorrowed">€0</div><div class="stat-label">Total Borrowed</div></div>
     <div class="stat-item"><div class="stat-value" id="statReturned">€0</div><div class="stat-label">Total Returned</div></div>
     <div class="stat-item"><div class="stat-value" id="statOutstanding">€0</div><div class="stat-label">Outstanding</div></div>
+    <div class="stat-item personal" id="statPersonalWrap" style="display:none">
+      <div class="stat-value" id="statPersonal">€0</div>
+      <div class="stat-label" id="statPersonalLabel">Your Outstanding</div>
+    </div>
   </div>
 
   <div class="tabs">
@@ -462,6 +542,8 @@ function loadData() {
       if (!p.transactions) p.transactions = [];
       if (!p.version) p.version = APP_VERSION;
       if (!p.createdAt) p.createdAt = new Date().toISOString();
+      // Migrate old string-format players to objects
+      p.players = p.players.map(pl => typeof pl === 'string' ? { name: pl, addedAt: null } : pl);
       return p;
     }
   } catch(e) {}
@@ -524,36 +606,47 @@ function addPlayer() {
   const name = input.value.trim();
   if (!name) return;
   if (data.players.length >= 15) return showToast('Maximum 15 players!');
-  if (data.players.find(p => p.toLowerCase() === name.toLowerCase())) return showToast('Player already exists!');
-  data.players.push(name);
+  if (getPlayerNames().find(n => n.toLowerCase() === name.toLowerCase())) return showToast('Player already exists!');
+  data.players.push({ name, addedAt: new Date().toISOString() });
   saveData(); input.value = '';
   renderPlayers(); updateStats();
   showToast(name + ' joined the table!');
 }
 
+function getPlayerName(p) { return typeof p === 'string' ? p : p.name; }
+function getPlayerObj(nameStr) { return data.players.find(p => getPlayerName(p) === nameStr); }
+function getPlayerAddedDate(nameStr) {
+  const p = getPlayerObj(nameStr);
+  return (p && p.addedAt) ? formatDateTime(p.addedAt) : 'Unknown';
+}
+function getPlayerNames() { return data.players.map(p => getPlayerName(p)); }
+
 function removePlayer(name) {
   if (!confirm('Remove ' + name + '? Transaction history will be kept.')) return;
-  data.players = data.players.filter(p => p !== name);
+  data.players = data.players.filter(p => getPlayerName(p) !== name);
   saveData(); renderPlayers(); updateStats();
   showToast(name + ' removed');
 }
 
 function renderPlayers() {
   const wrap = document.getElementById('playersTableWrap');
-  document.getElementById('playerCount').textContent = data.players.length + '/15 players';
-  if (data.players.length === 0) {
+  const names = getPlayerNames();
+  document.getElementById('playerCount').textContent = names.length + '/15 players';
+  if (names.length === 0) {
     wrap.innerHTML = '<div class="empty-state"><div class="big-icon">🃏</div>No players yet. Add someone to get started!</div>';
     return;
   }
-  let html = '<table class="players-table"><thead><tr><th>Player</th><th>Borrowed</th><th>Returned</th><th>Balance</th><th>Today</th><th></th></tr></thead><tbody>';
-  data.players.forEach(name => {
+  let html = '<table class="players-table"><thead><tr><th>Player</th><th>Joined</th><th>Borrowed</th><th>Returned</th><th>Balance</th><th>Today</th><th></th></tr></thead><tbody>';
+  names.forEach(name => {
     const t = getPlayerTotals(name);
     const todayCount = getTodayBorrowCount(name);
     const balClass = t.net > 0 ? 'amount-negative' : t.net < 0 ? 'amount-positive' : 'amount-zero';
     const balText = t.net > 0 ? 'Owes ' + formatCurrency(t.net) : t.net < 0 ? 'Surplus ' + formatCurrency(-t.net) : 'Settled';
     const esc = name.replace(/'/g, "\\'");
+    const addedDate = getPlayerAddedDate(name);
     html += `<tr>
       <td><div class="player-name"><div class="player-avatar">${getInitials(name)}</div>${name}</div></td>
+      <td style="font-size:0.8rem;color:var(--text-dim)">${addedDate}</td>
       <td>${formatCurrency(t.borrowed)}</td><td>${formatCurrency(t.returned)}</td>
       <td class="${balClass}">${balText}</td>
       <td><span class="borrow-count${todayCount >= 10 ? ' maxed' : ''}">${todayCount}/10</span></td>
@@ -566,7 +659,7 @@ function renderPlayers() {
 function updateActionDropdown() {
   const sel = document.getElementById('actionPlayer');
   sel.innerHTML = '<option value="">Select player...</option>';
-  data.players.forEach(name => sel.innerHTML += `<option value="${name}">${name}</option>`);
+  getPlayerNames().forEach(name => sel.innerHTML += `<option value="${name}">${name}</option>`);
 }
 
 function recordAction() {
@@ -596,7 +689,7 @@ function renderHistory() {
   const filterSel = document.getElementById('historyFilter');
   const curVal = filterSel.value;
   filterSel.innerHTML = '<option value="all">All Players</option>';
-  data.players.forEach(n => filterSel.innerHTML += `<option value="${n}"${n === curVal ? ' selected' : ''}>${n}</option>`);
+  getPlayerNames().forEach(n => filterSel.innerHTML += `<option value="${n}"${n === curVal ? ' selected' : ''}>${n}</option>`);
   let txns = [...data.transactions].reverse();
   if (curVal !== 'all') txns = txns.filter(t => t.player === curVal);
   const list = document.getElementById('historyList');
@@ -622,14 +715,14 @@ function renderSettlement() {
   const transfersSection = document.getElementById('transfersSection');
   const transfersList = document.getElementById('transfersList');
 
-  if (data.players.length === 0) {
+  if (getPlayerNames().length === 0) {
     grid.innerHTML = '<div class="empty-state"><div class="big-icon">🏦</div>Add players and record transactions to see settlements</div>';
     transfersSection.style.display = 'none';
     return;
   }
 
   // Render individual balance cards
-  grid.innerHTML = data.players.map(name => {
+  grid.innerHTML = getPlayerNames().map(name => {
     const t = getPlayerTotals(name);
     let cls, label, amt;
     if (t.net > 0) { cls = 'owes'; label = 'Owes the box'; amt = formatCurrency(t.net); }
@@ -642,7 +735,7 @@ function renderSettlement() {
   const debtors = []; // people who owe (net > 0)
   const creditors = []; // people owed (net < 0)
 
-  data.players.forEach(name => {
+  getPlayerNames().forEach(name => {
     const t = getPlayerTotals(name);
     if (t.net > 0) debtors.push({ name, amount: t.net });
     else if (t.net < 0) creditors.push({ name, amount: -t.net });
@@ -694,12 +787,14 @@ function renderSettlement() {
 }
 
 function updateStats() {
-  document.getElementById('statPlayers').textContent = data.players.length;
+  document.getElementById('statPlayers').textContent = getPlayerNames().length;
   let b = 0, r = 0;
   data.transactions.forEach(t => { if (t.type === 'borrow') b += t.amount; else r += t.amount; });
   document.getElementById('statBorrowed').textContent = formatCurrency(b);
   document.getElementById('statReturned').textContent = formatCurrency(r);
   document.getElementById('statOutstanding').textContent = formatCurrency(b - r);
+  updateIdentityBar();
+  updatePersonalStat();
 }
 
 // ─── Export / Import ───
@@ -742,10 +837,17 @@ function importData(event) {
 
 function confirmImport() {
   if (!pendingImportData) return;
-  const existP = new Set(data.players.map(p => p.toLowerCase()));
-  pendingImportData.players.forEach(p => { if (!existP.has(p.toLowerCase())) { data.players.push(p); existP.add(p.toLowerCase()); } });
+  const imported = pendingImportData;
+  const existP = new Set(getPlayerNames().map(n => n.toLowerCase()));
+  imported.players.forEach(p => {
+    const name = (typeof p === 'string' ? p : p.name).toLowerCase();
+    if (!existP.has(name)) {
+      data.players.push(typeof p === 'string' ? { name: p, addedAt: new Date().toISOString() } : p);
+      existP.add(name);
+    }
+  });
   const existT = new Set(data.transactions.map(t => t.id));
-  pendingImportData.transactions.forEach(t => { if (!existT.has(t.id)) { data.transactions.push(t); existT.add(t.id); } });
+  imported.transactions.forEach(t => { if (!existT.has(t.id)) { data.transactions.push(t); existT.add(t.id); } });
   data.transactions.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   saveData(); renderPlayers(); updateStats(); cancelImport();
   showToast('Backup imported & merged!');
@@ -781,7 +883,86 @@ function clearAllData() {
   showToast('All data cleared');
 }
 
-renderPlayers(); updateStats();
+// ─── Identity Management ───
+let currentPlayer = localStorage.getItem('poker_identity') || null;
+
+function showIdentitySelector() {
+  const sel = document.getElementById('identitySelect');
+  sel.innerHTML = '<option value="">Select your name...</option>';
+  getPlayerNames().forEach(n => sel.innerHTML += `<option value="${n}">${n}</option>`);
+  document.getElementById('identityOverlay').classList.remove('hidden');
+}
+
+function confirmIdentity() {
+  const sel = document.getElementById('identitySelect');
+  if (!sel.value) { showToast('Please select your name'); return; }
+  currentPlayer = sel.value;
+  localStorage.setItem('poker_identity', currentPlayer);
+  document.getElementById('identityOverlay').classList.add('hidden');
+  updateIdentityBar();
+  updateStats();
+}
+
+function skipIdentity() {
+  currentPlayer = null;
+  localStorage.removeItem('poker_identity');
+  document.getElementById('identityOverlay').classList.add('hidden');
+  updateIdentityBar();
+  updateStats();
+}
+
+function changeIdentity() {
+  showIdentitySelector();
+}
+
+function updateIdentityBar() {
+  const bar = document.getElementById('identityBar');
+  const personalWrap = document.getElementById('statPersonalWrap');
+  if (currentPlayer && getPlayerNames().includes(currentPlayer)) {
+    bar.style.display = 'flex';
+    document.getElementById('identityName').textContent = currentPlayer;
+    personalWrap.style.display = 'block';
+  } else {
+    bar.style.display = 'none';
+    personalWrap.style.display = 'none';
+  }
+}
+
+function updatePersonalStat() {
+  if (!currentPlayer || !getPlayerNames().includes(currentPlayer)) return;
+  const t = getPlayerTotals(currentPlayer);
+  const el = document.getElementById('statPersonal');
+  const label = document.getElementById('statPersonalLabel');
+  if (t.net > 0) {
+    el.textContent = formatCurrency(t.net);
+    el.style.color = 'var(--red)';
+    label.textContent = 'You Owe';
+  } else if (t.net < 0) {
+    el.textContent = formatCurrency(-t.net);
+    el.style.color = 'var(--green)';
+    label.textContent = 'Owed to You';
+  } else {
+    el.textContent = '✓';
+    el.style.color = 'var(--green)';
+    label.textContent = 'You\'re Settled';
+  }
+}
+
+// ─── Init ───
+function init() {
+  renderPlayers(); updateStats();
+  // Check if saved identity is still a valid player
+  if (currentPlayer && getPlayerNames().includes(currentPlayer)) {
+    document.getElementById('identityOverlay').classList.add('hidden');
+    updateIdentityBar();
+  } else if (getPlayerNames().length > 0) {
+    showIdentitySelector();
+  } else {
+    // No players yet, skip identity
+    document.getElementById('identityOverlay').classList.add('hidden');
+  }
+}
+init();
 </script>
 </body>
 </html>
