@@ -371,6 +371,29 @@
   }
   .identity-bar .ib-change:hover { color: var(--text); border-color: var(--text-muted); }
 
+  /* Avatar picker */
+  .avatar-picker {
+    display: grid; grid-template-columns: repeat(8, 1fr);
+    gap: 6px; margin: 12px 0;
+  }
+  .avatar-option {
+    width: 100%; aspect-ratio: 1; border-radius: var(--radius-sm);
+    background: var(--bg); border: 2px solid var(--border);
+    font-size: 1.4rem; cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .avatar-option:hover { border-color: var(--accent); transform: scale(1.1); }
+  .avatar-option.selected { border-color: var(--accent); background: var(--accent-dim); box-shadow: 0 0 12px rgba(232,183,49,0.3); }
+  .avatar-section-label {
+    font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 1px; margin: 10px 0 4px; font-weight: 600;
+  }
+  .player-icon-display { font-size: 1.3rem; line-height: 1; }
+  .identity-avatar-preview {
+    font-size: 2.5rem; margin: 8px 0;
+    filter: drop-shadow(0 0 8px rgba(232,183,49,0.2));
+  }
+
   /* Personal stat highlight */
   .stat-item.personal {
     border-color: var(--accent);
@@ -397,7 +420,28 @@
 
 <div class="app">
   <div class="header">
-    <div class="club-crest">♠</div>
+    <div class="club-crest">
+      <svg width="80" height="80" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="goldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#f5d96b"/>
+            <stop offset="50%" style="stop-color:#d4a017"/>
+            <stop offset="100%" style="stop-color:#e8b731"/>
+          </linearGradient>
+          <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <circle cx="50" cy="50" r="46" fill="none" stroke="url(#goldGrad)" stroke-width="2.5" filter="url(#glow)"/>
+        <circle cx="50" cy="50" r="40" fill="none" stroke="url(#goldGrad)" stroke-width="0.5" opacity="0.5"/>
+        <!-- Spade -->
+        <path d="M50 20 C50 20, 28 42, 28 55 C28 63, 35 68, 42 65 C45 63.5, 48 62, 50 65 C52 62, 55 63.5, 58 65 C65 68, 72 63, 72 55 C72 42, 50 20, 50 20Z" fill="url(#goldGrad)" filter="url(#glow)"/>
+        <rect x="47" y="62" width="6" height="12" rx="1" fill="url(#goldGrad)"/>
+        <!-- Stars -->
+        <text x="18" y="30" font-size="7" fill="#d4a017" opacity="0.7">✦</text>
+        <text x="76" y="30" font-size="7" fill="#d4a017" opacity="0.7">✦</text>
+        <text x="18" y="78" font-size="7" fill="#d4a017" opacity="0.7">✦</text>
+        <text x="76" y="78" font-size="7" fill="#d4a017" opacity="0.7">✦</text>
+      </svg>
+    </div>
     <h1>Almere Poker Club</h1>
     <div class="subtitle">Est. 2025 · Netherlands</div>
     <div class="suits">♠ ♥ ♦ ♣</div>
@@ -449,6 +493,8 @@
       <input type="text" id="playerName" placeholder="Enter player name..." maxlength="20" onkeydown="if(event.key==='Enter') addPlayer()">
       <button class="btn btn-primary" onclick="addPlayer()">Add Player</button>
     </div>
+    <div class="avatar-section-label">Choose an icon</div>
+    <div class="avatar-picker" id="avatarPicker"></div>
     <div id="playerCount" style="font-size:0.82rem;color:var(--text-dim);margin-bottom:12px"></div>
     <div id="playersTableWrap"></div>
   </div>
@@ -527,6 +573,28 @@
   </div>
 </div>
 
+<!-- Icon Picker Modal -->
+<div class="modal-overlay" id="iconPickerModal">
+  <div class="modal" style="max-width:500px">
+    <h3>🎨 Pick Your Icon</h3>
+    <p>Choose an icon for <strong id="iconPickerName"></strong></p>
+    <div class="identity-avatar-preview" id="iconPickerPreview">?</div>
+    <div class="avatar-section-label">Poker</div>
+    <div class="avatar-picker" id="iconPickerGrid1"></div>
+    <div class="avatar-section-label">Animals</div>
+    <div class="avatar-picker" id="iconPickerGrid2"></div>
+    <div class="avatar-section-label">Characters</div>
+    <div class="avatar-picker" id="iconPickerGrid3"></div>
+    <div class="avatar-section-label">Power</div>
+    <div class="avatar-picker" id="iconPickerGrid4"></div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn btn-secondary" onclick="cancelIconPicker()">Cancel</button>
+      <button class="btn btn-danger btn-sm" onclick="clearPlayerIcon()" style="margin-right:auto">Remove Icon</button>
+      <button class="btn btn-primary" onclick="confirmIconPicker()">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -601,15 +669,45 @@ function formatDateTime(iso) {
 
 function getInitials(name) { return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2); }
 
+// ─── Avatar Icons ───
+const PLAYER_ICONS = {
+  poker: ['🂡','♠','♥','♦','♣','🃏','🎰','🎲'],
+  animals: ['🐺','🦊','🦁','🐯','🦅','🐉','🦈','🐻'],
+  faces: ['😎','🤠','🧐','👑','🥷','🦹','🧙','👨‍🚀'],
+  objects: ['💎','🔥','⚡','🌟','🏆','💰','🎯','🗡️'],
+};
+let selectedIcon = null;
+
+function renderAvatarPicker() {
+  const picker = document.getElementById('avatarPicker');
+  let html = '';
+  Object.entries(PLAYER_ICONS).forEach(([cat, icons]) => {
+    icons.forEach(icon => {
+      html += `<div class="avatar-option${selectedIcon === icon ? ' selected' : ''}" onclick="selectIcon('${icon}')">${icon}</div>`;
+    });
+  });
+  picker.innerHTML = html;
+}
+
+function selectIcon(icon) {
+  selectedIcon = (selectedIcon === icon) ? null : icon;
+  renderAvatarPicker();
+}
+
+function getPlayerIcon(nameStr) {
+  const p = getPlayerObj(nameStr);
+  return (p && p.icon) ? p.icon : null;
+}
+
 function addPlayer() {
   const input = document.getElementById('playerName');
   const name = input.value.trim();
   if (!name) return;
   if (data.players.length >= 15) return showToast('Maximum 15 players!');
   if (getPlayerNames().find(n => n.toLowerCase() === name.toLowerCase())) return showToast('Player already exists!');
-  data.players.push({ name, addedAt: new Date().toISOString() });
-  saveData(); input.value = '';
-  renderPlayers(); updateStats();
+  data.players.push({ name, addedAt: new Date().toISOString(), icon: selectedIcon || null });
+  saveData(); input.value = ''; selectedIcon = null;
+  renderAvatarPicker(); renderPlayers(); updateStats();
   showToast(name + ' joined the table!');
 }
 
@@ -628,6 +726,59 @@ function removePlayer(name) {
   showToast(name + ' removed');
 }
 
+// ─── Icon Picker Modal ───
+let iconPickerTarget = null;
+let iconPickerSelected = null;
+
+function changePlayerIcon(name) {
+  iconPickerTarget = name;
+  iconPickerSelected = getPlayerIcon(name);
+  document.getElementById('iconPickerName').textContent = name;
+  updateIconPickerPreview();
+  renderIconPickerGrids();
+  document.getElementById('iconPickerModal').classList.add('active');
+}
+
+function renderIconPickerGrids() {
+  const categories = Object.values(PLAYER_ICONS);
+  ['iconPickerGrid1','iconPickerGrid2','iconPickerGrid3','iconPickerGrid4'].forEach((id, i) => {
+    const grid = document.getElementById(id);
+    grid.innerHTML = categories[i].map(icon =>
+      `<div class="avatar-option${iconPickerSelected === icon ? ' selected' : ''}" onclick="pickModalIcon('${icon}')">${icon}</div>`
+    ).join('');
+  });
+}
+
+function pickModalIcon(icon) {
+  iconPickerSelected = (iconPickerSelected === icon) ? null : icon;
+  updateIconPickerPreview();
+  renderIconPickerGrids();
+}
+
+function updateIconPickerPreview() {
+  document.getElementById('iconPickerPreview').textContent = iconPickerSelected || '?';
+}
+
+function confirmIconPicker() {
+  if (!iconPickerTarget) return;
+  const p = getPlayerObj(iconPickerTarget);
+  if (p) { p.icon = iconPickerSelected; saveData(); }
+  renderPlayers(); updateStats();
+  cancelIconPicker();
+  showToast(iconPickerTarget + "'s icon updated!");
+}
+
+function clearPlayerIcon() {
+  iconPickerSelected = null;
+  updateIconPickerPreview();
+  renderIconPickerGrids();
+}
+
+function cancelIconPicker() {
+  iconPickerTarget = null; iconPickerSelected = null;
+  document.getElementById('iconPickerModal').classList.remove('active');
+}
+
 function renderPlayers() {
   const wrap = document.getElementById('playersTableWrap');
   const names = getPlayerNames();
@@ -644,13 +795,20 @@ function renderPlayers() {
     const balText = t.net > 0 ? 'Owes ' + formatCurrency(t.net) : t.net < 0 ? 'Surplus ' + formatCurrency(-t.net) : 'Settled';
     const esc = name.replace(/'/g, "\\'");
     const addedDate = getPlayerAddedDate(name);
+    const icon = getPlayerIcon(name);
+    const avatarHtml = icon
+      ? `<div class="player-avatar" style="background:transparent;font-size:1.3rem">${icon}</div>`
+      : `<div class="player-avatar">${getInitials(name)}</div>`;
     html += `<tr>
-      <td><div class="player-name"><div class="player-avatar">${getInitials(name)}</div>${name}</div></td>
+      <td><div class="player-name">${avatarHtml}${name}</div></td>
       <td style="font-size:0.8rem;color:var(--text-dim)">${addedDate}</td>
       <td>${formatCurrency(t.borrowed)}</td><td>${formatCurrency(t.returned)}</td>
       <td class="${balClass}">${balText}</td>
       <td><span class="borrow-count${todayCount >= 10 ? ' maxed' : ''}">${todayCount}/10</span></td>
-      <td><button class="btn btn-danger btn-sm" onclick="removePlayer('${esc}')">✕</button></td>
+      <td>
+        <button class="btn btn-secondary btn-sm" onclick="changePlayerIcon('${esc}')" title="Change icon" style="margin-right:4px">🎨</button>
+        <button class="btn btn-danger btn-sm" onclick="removePlayer('${esc}')">✕</button>
+      </td>
     </tr>`;
   });
   wrap.innerHTML = html + '</tbody></table>';
@@ -889,7 +1047,11 @@ let currentPlayer = localStorage.getItem('poker_identity') || null;
 function showIdentitySelector() {
   const sel = document.getElementById('identitySelect');
   sel.innerHTML = '<option value="">Select your name...</option>';
-  getPlayerNames().forEach(n => sel.innerHTML += `<option value="${n}">${n}</option>`);
+  getPlayerNames().forEach(n => {
+    const icon = getPlayerIcon(n);
+    const prefix = icon ? icon + ' ' : '';
+    sel.innerHTML += `<option value="${n}">${prefix}${n}</option>`;
+  });
   document.getElementById('identityOverlay').classList.remove('hidden');
 }
 
@@ -920,7 +1082,9 @@ function updateIdentityBar() {
   const personalWrap = document.getElementById('statPersonalWrap');
   if (currentPlayer && getPlayerNames().includes(currentPlayer)) {
     bar.style.display = 'flex';
-    document.getElementById('identityName').textContent = currentPlayer;
+    const icon = getPlayerIcon(currentPlayer);
+    const iconHtml = icon ? icon + ' ' : '♠ ';
+    document.getElementById('identityName').innerHTML = iconHtml + currentPlayer;
     personalWrap.style.display = 'block';
   } else {
     bar.style.display = 'none';
@@ -950,7 +1114,7 @@ function updatePersonalStat() {
 
 // ─── Init ───
 function init() {
-  renderPlayers(); updateStats();
+  renderPlayers(); updateStats(); renderAvatarPicker();
   // Check if saved identity is still a valid player
   if (currentPlayer && getPlayerNames().includes(currentPlayer)) {
     document.getElementById('identityOverlay').classList.add('hidden');
