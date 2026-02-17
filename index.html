@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Poker Night Tracker</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0f14;
+    --surface: #161a22;
+    --surface-hover: #1c2029;
+    --card: #1a1f28;
+    --border: #2a303c;
+    --accent: #e8b731;
+    --accent-dim: rgba(232, 183, 49, 0.15);
+    --accent-glow: rgba(232, 183, 49, 0.3);
+    --green: #34d399;
+    --green-dim: rgba(52, 211, 153, 0.15);
+    --red: #f87171;
+    --red-dim: rgba(248, 113, 113, 0.15);
+    --text: #e8eaed;
+    --text-dim: #8b919e;
+    --text-muted: #5a6070;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at 20% 0%, rgba(232,183,49,0.04) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 100%, rgba(52,211,153,0.03) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  .header { text-align: center; padding: 32px 0 28px; }
+  .header h1 {
+    font-family: 'Playfair Display', serif;
+    font-weight: 900; font-size: 2.6rem;
+    color: var(--accent); letter-spacing: -1px;
+    text-shadow: 0 0 40px rgba(232,183,49,0.2);
+  }
+  .header p { color: var(--text-dim); font-size: 0.95rem; margin-top: 6px; }
+  .header .suits { font-size: 1.2rem; letter-spacing: 6px; margin-top: 4px; opacity: 0.4; }
+
+  .section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px; margin-bottom: 20px;
+  }
+  .section-title {
+    font-weight: 700; font-size: 1.05rem; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title .icon { font-size: 1.15rem; }
+
+  .input-row { display: flex; gap: 10px; margin-bottom: 12px; }
+  input[type="text"], input[type="number"] {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 14px; border-radius: var(--radius-sm);
+    font-family: inherit; font-size: 0.95rem; outline: none;
+    transition: border-color 0.2s; width: 100%;
+  }
+  input:focus { border-color: var(--accent); }
+  input::placeholder { color: var(--text-muted); }
+
+  select {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 14px; border-radius: var(--radius-sm);
+    font-family: inherit; font-size: 0.95rem; outline: none;
+    cursor: pointer; width: 100%;
+  }
+  select:focus { border-color: var(--accent); }
+
+  .btn {
+    padding: 10px 20px; border: none; border-radius: var(--radius-sm);
+    font-family: inherit; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s; white-space: nowrap;
+  }
+  .btn-primary { background: var(--accent); color: #0c0f14; }
+  .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn-primary:disabled { background: var(--text-muted); cursor: not-allowed; transform: none; }
+  .btn-secondary { background: var(--border); color: var(--text); }
+  .btn-secondary:hover { background: #353b4a; }
+  .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.25); }
+  .btn-danger:hover { background: rgba(248,113,113,0.25); }
+  .btn-sm { padding: 6px 14px; font-size: 0.82rem; }
+  .btn-outline { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .btn-outline:hover { background: var(--accent-dim); }
+
+  .players-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .players-table th {
+    text-align: left; font-size: 0.78rem; font-weight: 600;
+    color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 8px 10px; border-bottom: 1px solid var(--border);
+  }
+  .players-table td {
+    padding: 12px 10px; border-bottom: 1px solid rgba(42,48,60,0.5);
+    font-size: 0.92rem; vertical-align: middle;
+  }
+  .players-table tr:last-child td { border-bottom: none; }
+  .players-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .player-name { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .player-avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent-dim); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700; flex-shrink: 0;
+  }
+
+  .amount-positive { color: var(--green); font-weight: 600; }
+  .amount-negative { color: var(--red); font-weight: 600; }
+  .amount-zero { color: var(--text-dim); }
+
+  .borrow-count {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--accent-dim); color: var(--accent);
+    padding: 2px 8px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+  }
+  .borrow-count.maxed { background: var(--red-dim); color: var(--red); }
+
+  .history-list { max-height: 400px; overflow-y: auto; margin-top: 8px; }
+  .history-list::-webkit-scrollbar { width: 6px; }
+  .history-list::-webkit-scrollbar-track { background: transparent; }
+  .history-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .history-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border-radius: var(--radius-sm);
+    margin-bottom: 4px; font-size: 0.88rem; transition: background 0.15s;
+  }
+  .history-item:hover { background: rgba(255,255,255,0.03); }
+  .history-item .time { color: var(--text-muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; min-width: 130px; }
+  .history-item .detail { flex: 1; margin: 0 12px; }
+  .history-item .h-amount { font-weight: 600; white-space: nowrap; }
+  .history-item.borrow .h-amount { color: var(--red); }
+  .history-item.return .h-amount { color: var(--green); }
+  .history-item .delete-btn {
+    background: none; border: none; color: var(--text-muted);
+    cursor: pointer; padding: 4px; font-size: 0.9rem; opacity: 0; transition: opacity 0.15s;
+  }
+  .history-item:hover .delete-btn { opacity: 1; }
+  .history-item .delete-btn:hover { color: var(--red); }
+
+  .settlement-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px; margin-top: 8px;
+  }
+  .settlement-card { padding: 16px; border-radius: var(--radius-sm); border: 1px solid; }
+  .settlement-card.owes { background: var(--red-dim); border-color: rgba(248,113,113,0.2); }
+  .settlement-card.settled { background: var(--green-dim); border-color: rgba(52,211,153,0.2); }
+  .settlement-card.surplus { background: var(--accent-dim); border-color: rgba(232,183,49,0.2); }
+  .settlement-card .s-name { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
+  .settlement-card .s-amount { font-size: 1.3rem; font-weight: 700; }
+  .settlement-card.owes .s-amount { color: var(--red); }
+  .settlement-card.settled .s-amount { color: var(--green); }
+  .settlement-card.surplus .s-amount { color: var(--accent); }
+  .settlement-card .s-label { font-size: 0.78rem; color: var(--text-dim); margin-top: 2px; }
+
+  .tabs {
+    display: flex; gap: 4px; margin-bottom: 16px;
+    background: var(--bg); padding: 4px; border-radius: var(--radius-sm); overflow-x: auto;
+  }
+  .tab {
+    flex: 1; padding: 10px; text-align: center;
+    font-size: 0.88rem; font-weight: 600; border: none; background: transparent;
+    color: var(--text-dim); cursor: pointer; border-radius: 6px;
+    transition: all 0.2s; white-space: nowrap; min-width: fit-content;
+  }
+  .tab.active { background: var(--surface); color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .stats-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .stat-item {
+    flex: 1; min-width: 140px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 16px; text-align: center;
+  }
+  .stat-value { font-size: 1.5rem; font-weight: 700; font-family: 'Playfair Display', serif; }
+  .stat-label { font-size: 0.78rem; color: var(--text-dim); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .data-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .data-info {
+    font-size: 0.85rem; color: var(--text-dim); margin-top: 16px; padding: 14px;
+    background: var(--bg); border-radius: var(--radius-sm); border: 1px solid var(--border);
+    line-height: 1.6;
+  }
+  .data-info code {
+    background: rgba(232,183,49,0.1); color: var(--accent);
+    padding: 2px 6px; border-radius: 4px; font-size: 0.82rem;
+  }
+  .backup-status { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; margin-top: 12px; }
+  .backup-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+  .backup-dot.warning { background: var(--accent); }
+  .backup-dot.danger { background: var(--red); }
+
+  .file-input-hidden { display: none; }
+
+  .footer { text-align: center; padding: 24px 0; color: var(--text-muted); font-size: 0.8rem; }
+  .footer .clear-all {
+    color: var(--red); background: none; border: 1px solid rgba(248,113,113,0.25);
+    padding: 6px 16px; border-radius: var(--radius-sm); font-family: inherit;
+    font-size: 0.8rem; cursor: pointer; margin-top: 8px; transition: all 0.2s;
+  }
+  .footer .clear-all:hover { background: var(--red-dim); }
+
+  .empty-state { text-align: center; color: var(--text-muted); padding: 32px 16px; font-size: 0.92rem; }
+  .empty-state .big-icon { font-size: 2rem; margin-bottom: 8px; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    padding: 12px 24px; border-radius: var(--radius); font-size: 0.9rem; font-weight: 500;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4); z-index: 1000; opacity: 0;
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1); pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6); z-index: 999;
+    align-items: center; justify-content: center; backdrop-filter: blur(4px);
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 28px; max-width: 460px; width: 90%;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  }
+  .modal h3 { font-size: 1.1rem; margin-bottom: 12px; }
+  .modal p { font-size: 0.9rem; color: var(--text-dim); margin-bottom: 16px; line-height: 1.5; }
+  .modal .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+  @media (max-width: 640px) {
+    .header h1 { font-size: 1.9rem; }
+    .section { padding: 16px; }
+    .players-table { font-size: 0.85rem; }
+    .players-table th, .players-table td { padding: 8px 6px; }
+    .stats-bar { gap: 8px; }
+    .stat-item { min-width: 100px; padding: 12px; }
+    .stat-value { font-size: 1.2rem; }
+    .settlement-grid { grid-template-columns: 1fr; }
+    .data-actions { flex-direction: column; }
+    .data-actions .btn { width: 100%; text-align: center; }
+    .history-item { flex-wrap: wrap; gap: 4px; }
+    .history-item .time { min-width: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="header">
+    <h1>Poker Night</h1>
+    <div class="suits">♠ ♥ ♦ ♣</div>
+    <p>Track borrows, returns & settlements</p>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-item"><div class="stat-value" id="statPlayers">0</div><div class="stat-label">Players</div></div>
+    <div class="stat-item"><div class="stat-value" id="statBorrowed">₹0</div><div class="stat-label">Total Borrowed</div></div>
+    <div class="stat-item"><div class="stat-value" id="statReturned">₹0</div><div class="stat-label">Total Returned</div></div>
+    <div class="stat-item"><div class="stat-value" id="statOutstanding">₹0</div><div class="stat-label">Outstanding</div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('players')">Players</button>
+    <button class="tab" onclick="switchTab('actions')">Borrow / Return</button>
+    <button class="tab" onclick="switchTab('history')">History</button>
+    <button class="tab" onclick="switchTab('settlement')">Settlement</button>
+    <button class="tab" onclick="switchTab('data')">Backup</button>
+  </div>
+
+  <!-- Players -->
+  <div id="tab-players" class="section">
+    <div class="section-title"><span class="icon">👥</span> Players</div>
+    <div class="input-row">
+      <input type="text" id="playerName" placeholder="Enter player name..." maxlength="20" onkeydown="if(event.key==='Enter') addPlayer()">
+      <button class="btn btn-primary" onclick="addPlayer()">Add Player</button>
+    </div>
+    <div id="playerCount" style="font-size:0.82rem;color:var(--text-dim);margin-bottom:12px"></div>
+    <div id="playersTableWrap"></div>
+  </div>
+
+  <!-- Actions -->
+  <div id="tab-actions" class="section" style="display:none">
+    <div class="section-title"><span class="icon">💰</span> Borrow / Return</div>
+    <div class="input-row">
+      <select id="actionPlayer"><option value="">Select player...</option></select>
+      <select id="actionType"><option value="borrow">Borrow</option><option value="return">Return</option></select>
+    </div>
+    <div class="input-row">
+      <input type="number" id="actionAmount" placeholder="Amount (₹)" min="1" onkeydown="if(event.key==='Enter') recordAction()">
+      <button class="btn btn-primary" onclick="recordAction()">Record</button>
+    </div>
+    <div id="actionMsg" style="font-size:0.85rem;margin-top:8px;min-height:20px"></div>
+  </div>
+
+  <!-- History -->
+  <div id="tab-history" class="section" style="display:none">
+    <div class="section-title"><span class="icon">📋</span> Transaction History</div>
+    <div style="margin-bottom:12px">
+      <select id="historyFilter" onchange="renderHistory()" style="max-width:200px"><option value="all">All Players</option></select>
+    </div>
+    <div class="history-list" id="historyList"></div>
+  </div>
+
+  <!-- Settlement -->
+  <div id="tab-settlement" class="section" style="display:none">
+    <div class="section-title"><span class="icon">🏦</span> Settlement</div>
+    <div id="settlementGrid" class="settlement-grid"></div>
+  </div>
+
+  <!-- Backup -->
+  <div id="tab-data" class="section" style="display:none">
+    <div class="section-title"><span class="icon">💾</span> Backup & Restore</div>
+    <p style="font-size:0.9rem;color:var(--text-dim);margin-bottom:16px">
+      Export your data as a JSON file to keep a backup, or import a previous backup to restore your history.
+    </p>
+    <div class="data-actions">
+      <button class="btn btn-primary" onclick="exportData()">📤 Export Data</button>
+      <button class="btn btn-outline" onclick="document.getElementById('importFile').click()">📥 Import Backup</button>
+      <input type="file" id="importFile" class="file-input-hidden" accept=".json" onchange="importData(event)">
+    </div>
+    <div id="backupStatus" class="backup-status"></div>
+    <div class="data-info">
+      <strong>How it works:</strong><br><br>
+      <strong>Export</strong> downloads a <code>.json</code> file with all your players and transactions. Save it to Google Drive or OneDrive for safe keeping.<br><br>
+      <strong>Import</strong> restores data from a previously exported file. Data is <em>merged</em> with current data (no duplicates).<br><br>
+      <strong>Tip:</strong> Export after every poker session. This way even if you switch browsers or clear cache, your history is safe.
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Data auto-saved to browser · Export backups for long-term safety</p>
+    <button class="clear-all" onclick="clearAllData()">⚠ Clear All Data</button>
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal">
+    <h3>📥 Import Backup</h3>
+    <div id="importPreview"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="cancelImport()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmImport()">Import & Merge</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STORAGE_KEY = 'poker_tracker_v2';
+const APP_VERSION = '2.0';
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (!p.players) p.players = [];
+      if (!p.transactions) p.transactions = [];
+      if (!p.version) p.version = APP_VERSION;
+      if (!p.createdAt) p.createdAt = new Date().toISOString();
+      return p;
+    }
+  } catch(e) {}
+  return { version: APP_VERSION, createdAt: new Date().toISOString(), players: [], transactions: [] };
+}
+
+function saveData() {
+  data.lastModified = new Date().toISOString();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  updateBackupStatus();
+}
+
+let data = loadData();
+let pendingImportData = null;
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+const ALL_TABS = ['players','actions','history','settlement','data'];
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((el, i) => el.classList.toggle('active', ALL_TABS[i] === tab));
+  ALL_TABS.forEach(t => document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none');
+  if (tab === 'history') renderHistory();
+  if (tab === 'settlement') renderSettlement();
+  if (tab === 'actions') updateActionDropdown();
+  if (tab === 'data') updateBackupStatus();
+}
+
+function getToday() { return new Date().toISOString().split('T')[0]; }
+
+function getTodayBorrowCount(name) {
+  const today = getToday();
+  return data.transactions.filter(t => t.player === name && t.type === 'borrow' && t.date === today).length;
+}
+
+function getPlayerTotals(name) {
+  let borrowed = 0, returned = 0;
+  data.transactions.forEach(t => {
+    if (t.player === name) { if (t.type === 'borrow') borrowed += t.amount; else returned += t.amount; }
+  });
+  return { borrowed, returned, net: borrowed - returned };
+}
+
+function formatCurrency(n) { return '₹' + n.toLocaleString('en-IN'); }
+
+function formatDateTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' +
+         d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
+function getInitials(name) { return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2); }
+
+function addPlayer() {
+  const input = document.getElementById('playerName');
+  const name = input.value.trim();
+  if (!name) return;
+  if (data.players.length >= 15) return showToast('Maximum 15 players!');
+  if (data.players.find(p => p.toLowerCase() === name.toLowerCase())) return showToast('Player already exists!');
+  data.players.push(name);
+  saveData(); input.value = '';
+  renderPlayers(); updateStats();
+  showToast(name + ' joined the table!');
+}
+
+function removePlayer(name) {
+  if (!confirm('Remove ' + name + '? Transaction history will be kept.')) return;
+  data.players = data.players.filter(p => p !== name);
+  saveData(); renderPlayers(); updateStats();
+  showToast(name + ' removed');
+}
+
+function renderPlayers() {
+  const wrap = document.getElementById('playersTableWrap');
+  document.getElementById('playerCount').textContent = data.players.length + '/15 players';
+  if (data.players.length === 0) {
+    wrap.innerHTML = '<div class="empty-state"><div class="big-icon">🃏</div>No players yet. Add someone to get started!</div>';
+    return;
+  }
+  let html = '<table class="players-table"><thead><tr><th>Player</th><th>Borrowed</th><th>Returned</th><th>Balance</th><th>Today</th><th></th></tr></thead><tbody>';
+  data.players.forEach(name => {
+    const t = getPlayerTotals(name);
+    const todayCount = getTodayBorrowCount(name);
+    const balClass = t.net > 0 ? 'amount-negative' : t.net < 0 ? 'amount-positive' : 'amount-zero';
+    const balText = t.net > 0 ? 'Owes ' + formatCurrency(t.net) : t.net < 0 ? 'Surplus ' + formatCurrency(-t.net) : 'Settled';
+    const esc = name.replace(/'/g, "\\'");
+    html += `<tr>
+      <td><div class="player-name"><div class="player-avatar">${getInitials(name)}</div>${name}</div></td>
+      <td>${formatCurrency(t.borrowed)}</td><td>${formatCurrency(t.returned)}</td>
+      <td class="${balClass}">${balText}</td>
+      <td><span class="borrow-count${todayCount >= 10 ? ' maxed' : ''}">${todayCount}/10</span></td>
+      <td><button class="btn btn-danger btn-sm" onclick="removePlayer('${esc}')">✕</button></td>
+    </tr>`;
+  });
+  wrap.innerHTML = html + '</tbody></table>';
+}
+
+function updateActionDropdown() {
+  const sel = document.getElementById('actionPlayer');
+  sel.innerHTML = '<option value="">Select player...</option>';
+  data.players.forEach(name => sel.innerHTML += `<option value="${name}">${name}</option>`);
+}
+
+function recordAction() {
+  const player = document.getElementById('actionPlayer').value;
+  const type = document.getElementById('actionType').value;
+  const amtInput = document.getElementById('actionAmount');
+  const amount = parseInt(amtInput.value);
+  const msg = document.getElementById('actionMsg');
+  if (!player) { msg.innerHTML = '<span style="color:var(--red)">Select a player</span>'; return; }
+  if (!amount || amount <= 0) { msg.innerHTML = '<span style="color:var(--red)">Enter a valid amount</span>'; return; }
+  if (type === 'borrow' && getTodayBorrowCount(player) >= 10) {
+    msg.innerHTML = `<span style="color:var(--red)">${player} hit the 10-borrow limit for today!</span>`; return;
+  }
+  data.transactions.push({
+    id: Date.now() + '_' + Math.random().toString(36).slice(2,6),
+    player, type, amount, date: getToday(), timestamp: new Date().toISOString()
+  });
+  saveData(); amtInput.value = '';
+  const action = type === 'borrow' ? 'borrowed' : 'returned';
+  msg.innerHTML = `<span style="color:var(--green)">✓ ${player} ${action} ${formatCurrency(amount)}</span>`;
+  setTimeout(() => msg.innerHTML = '', 3000);
+  renderPlayers(); updateStats();
+  showToast(`${player} ${action} ${formatCurrency(amount)}`);
+}
+
+function renderHistory() {
+  const filterSel = document.getElementById('historyFilter');
+  const curVal = filterSel.value;
+  filterSel.innerHTML = '<option value="all">All Players</option>';
+  data.players.forEach(n => filterSel.innerHTML += `<option value="${n}"${n === curVal ? ' selected' : ''}>${n}</option>`);
+  let txns = [...data.transactions].reverse();
+  if (curVal !== 'all') txns = txns.filter(t => t.player === curVal);
+  const list = document.getElementById('historyList');
+  if (txns.length === 0) { list.innerHTML = '<div class="empty-state"><div class="big-icon">📜</div>No transactions yet</div>'; return; }
+  list.innerHTML = txns.map(t => `
+    <div class="history-item ${t.type}">
+      <span class="time">${formatDateTime(t.timestamp)}</span>
+      <span class="detail"><strong>${t.player}</strong> ${t.type === 'borrow' ? 'borrowed' : 'returned'}</span>
+      <span class="h-amount">${t.type === 'borrow' ? '-' : '+'}${formatCurrency(t.amount)}</span>
+      <button class="delete-btn" onclick="deleteTransaction('${t.id}')" title="Delete">✕</button>
+    </div>`).join('');
+}
+
+function deleteTransaction(id) {
+  if (!confirm('Delete this transaction?')) return;
+  data.transactions = data.transactions.filter(t => t.id !== id);
+  saveData(); renderHistory(); renderPlayers(); updateStats();
+  showToast('Transaction deleted');
+}
+
+function renderSettlement() {
+  const grid = document.getElementById('settlementGrid');
+  if (data.players.length === 0) {
+    grid.innerHTML = '<div class="empty-state"><div class="big-icon">🏦</div>Add players and record transactions to see settlements</div>'; return;
+  }
+  grid.innerHTML = data.players.map(name => {
+    const t = getPlayerTotals(name);
+    let cls, label, amt;
+    if (t.net > 0) { cls = 'owes'; label = 'Owes the box'; amt = formatCurrency(t.net); }
+    else if (t.net < 0) { cls = 'surplus'; label = 'Box owes them'; amt = formatCurrency(-t.net); }
+    else { cls = 'settled'; label = 'All settled!'; amt = '✓'; }
+    return `<div class="settlement-card ${cls}"><div class="s-name">${name}</div><div class="s-amount">${amt}</div><div class="s-label">${label}</div></div>`;
+  }).join('');
+}
+
+function updateStats() {
+  document.getElementById('statPlayers').textContent = data.players.length;
+  let b = 0, r = 0;
+  data.transactions.forEach(t => { if (t.type === 'borrow') b += t.amount; else r += t.amount; });
+  document.getElementById('statBorrowed').textContent = formatCurrency(b);
+  document.getElementById('statReturned').textContent = formatCurrency(r);
+  document.getElementById('statOutstanding').textContent = formatCurrency(b - r);
+}
+
+// ─── Export / Import ───
+function exportData() {
+  const payload = { ...data, exportedAt: new Date().toISOString(), appVersion: APP_VERSION };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `poker-backup-${getToday()}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  data.lastExported = new Date().toISOString();
+  saveData();
+  showToast('Backup exported!');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!imported.players || !imported.transactions) { showToast('Invalid backup file!'); return; }
+      pendingImportData = imported;
+      document.getElementById('importPreview').innerHTML = `
+        <p>This backup contains:</p>
+        <p style="color:var(--text);margin-bottom:8px">
+          <strong>${imported.players.length}</strong> players and
+          <strong>${imported.transactions.length}</strong> transactions
+          ${imported.exportedAt ? '<br>Exported: ' + formatDateTime(imported.exportedAt) : ''}
+        </p>
+        <p>Data will be <strong>merged</strong> with your current data (duplicates skipped).</p>`;
+      document.getElementById('importModal').classList.add('active');
+    } catch(err) { showToast('Error reading file!'); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function confirmImport() {
+  if (!pendingImportData) return;
+  const existP = new Set(data.players.map(p => p.toLowerCase()));
+  pendingImportData.players.forEach(p => { if (!existP.has(p.toLowerCase())) { data.players.push(p); existP.add(p.toLowerCase()); } });
+  const existT = new Set(data.transactions.map(t => t.id));
+  pendingImportData.transactions.forEach(t => { if (!existT.has(t.id)) { data.transactions.push(t); existT.add(t.id); } });
+  data.transactions.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  saveData(); renderPlayers(); updateStats(); cancelImport();
+  showToast('Backup imported & merged!');
+}
+
+function cancelImport() {
+  pendingImportData = null;
+  document.getElementById('importModal').classList.remove('active');
+}
+
+function updateBackupStatus() {
+  const el = document.getElementById('backupStatus');
+  if (!el) return;
+  const n = data.transactions.length;
+  const last = data.lastExported;
+  if (n === 0) { el.innerHTML = '<span class="backup-dot"></span> No data to back up yet'; return; }
+  if (!last) { el.innerHTML = `<span class="backup-dot danger"></span> <strong>${n}</strong> transactions — never backed up! Export now.`; return; }
+  const days = Math.floor((Date.now() - new Date(last)) / 864e5);
+  const hasChanges = data.lastModified && new Date(data.lastModified) > new Date(last);
+  if (hasChanges && days > 7)
+    el.innerHTML = `<span class="backup-dot danger"></span> Last backup <strong>${days} days ago</strong> with unsaved changes. Export recommended!`;
+  else if (hasChanges)
+    el.innerHTML = `<span class="backup-dot warning"></span> Last backup: ${formatDateTime(last)}. You have changes since then.`;
+  else
+    el.innerHTML = `<span class="backup-dot"></span> Last backup: ${formatDateTime(last)}. All up to date!`;
+}
+
+function clearAllData() {
+  if (!confirm('Delete ALL data? This cannot be undone! (Export a backup first)')) return;
+  if (!confirm('Are you absolutely sure?')) return;
+  data = { version: APP_VERSION, createdAt: new Date().toISOString(), players: [], transactions: [] };
+  saveData(); renderPlayers(); updateStats();
+  showToast('All data cleared');
+}
+
+renderPlayers(); updateStats();
+</script>
+</body>
+</html>
