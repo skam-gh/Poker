@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Almere Poker Club</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>">
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♠</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600;700;900&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0c0f14;
@@ -49,13 +49,13 @@
 
   .app { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 24px 20px 60px; }
 
-  .header { text-align: center; padding: 40px 0 32px; position: relative; }
+  .header { text-align: center; padding: 44px 0 36px; position: relative; }
   .header::before {
     content: '';
     position: absolute;
     top: 0; left: 50%;
     transform: translateX(-50%);
-    width: 120px; height: 2px;
+    width: 160px; height: 2px;
     background: linear-gradient(90deg, transparent, var(--accent), transparent);
   }
   .header::after {
@@ -63,43 +63,72 @@
     position: absolute;
     bottom: 0; left: 50%;
     transform: translateX(-50%);
-    width: 200px; height: 1px;
+    width: 280px; height: 1px;
     background: linear-gradient(90deg, transparent, var(--border), transparent);
   }
   .header .club-crest {
-    font-size: 2.4rem;
-    margin-bottom: 8px;
-    filter: drop-shadow(0 0 12px rgba(232,183,49,0.3));
+    margin-bottom: 12px;
+    filter: drop-shadow(0 0 20px rgba(232,183,49,0.25));
+    animation: logoFloat 6s ease-in-out infinite;
   }
-  .header h1 {
-    font-family: 'Playfair Display', serif;
-    font-weight: 900; font-size: 2.8rem;
-    color: var(--accent); letter-spacing: 2px;
+  @keyframes logoFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  .header .club-name {
+    font-family: 'Cinzel Decorative', serif;
+    font-weight: 900; font-size: 2.2rem;
+    letter-spacing: 4px;
     text-transform: uppercase;
-    text-shadow: 0 0 40px rgba(232,183,49,0.25), 0 2px 4px rgba(0,0,0,0.3);
-    background: linear-gradient(180deg, #f5d96b 0%, #d4a017 50%, #e8b731 100%);
+    line-height: 1.1;
+    background: linear-gradient(170deg, #fce38a 0%, #e8b731 25%, #d4a017 50%, #e8b731 75%, #fce38a 100%);
+    background-size: 200% 200%;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    animation: goldShimmer 4s ease-in-out infinite;
+    text-shadow: none;
+  }
+  @keyframes goldShimmer {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .header .club-name .word-poker {
+    display: block;
+    font-size: 3.2rem;
+    letter-spacing: 10px;
+    margin-top: 2px;
   }
   .header .subtitle {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 1.05rem;
+    font-family: 'Cinzel', serif;
+    font-size: 0.82rem;
     font-weight: 600;
-    color: var(--text-dim);
-    letter-spacing: 5px;
+    color: var(--text-muted);
+    letter-spacing: 6px;
     text-transform: uppercase;
-    margin-top: 6px;
-  }
-  .header .suits {
-    font-size: 1rem; letter-spacing: 8px; margin-top: 12px; opacity: 0.35;
-  }
-  .header .divider-ornament {
     margin-top: 10px;
-    font-size: 0.7rem;
+  }
+  .header .suit-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 14px;
     color: var(--accent);
-    letter-spacing: 4px;
-    opacity: 0.5;
+    opacity: 0.4;
+    font-size: 0.65rem;
+    letter-spacing: 2px;
+  }
+  .header .suit-divider .line {
+    width: 40px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent));
+  }
+  .header .suit-divider .line:last-child {
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+  .header .suit-divider .suits-mini {
+    font-size: 0.8rem; letter-spacing: 4px;
   }
 
   .section {
@@ -235,7 +264,7 @@
     border: 1px solid var(--border); border-radius: var(--radius-sm);
     padding: 16px; text-align: center;
   }
-  .stat-value { font-size: 1.5rem; font-weight: 700; font-family: 'Playfair Display', serif; }
+  .stat-value { font-size: 1.5rem; font-weight: 700; font-family: 'Cinzel', serif; }
   .stat-label { font-size: 0.78rem; color: var(--text-dim); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
 
   .data-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
@@ -401,7 +430,8 @@
   }
 
   @media (max-width: 640px) {
-    .header h1 { font-size: 1.9rem; }
+    .header .club-name { font-size: 1.5rem; }
+    .header .club-name .word-poker { font-size: 2.2rem; letter-spacing: 6px; }
     .section { padding: 16px; }
     .players-table { font-size: 0.85rem; }
     .players-table th, .players-table td { padding: 8px 6px; }
@@ -421,38 +451,67 @@
 <div class="app">
   <div class="header">
     <div class="club-crest">
-      <svg width="80" height="80" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <svg width="110" height="110" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="goldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" style="stop-color:#f5d96b"/>
-            <stop offset="50%" style="stop-color:#d4a017"/>
-            <stop offset="100%" style="stop-color:#e8b731"/>
+            <stop offset="0%" style="stop-color:#fce38a"/>
+            <stop offset="30%" style="stop-color:#e8b731"/>
+            <stop offset="60%" style="stop-color:#d4a017"/>
+            <stop offset="100%" style="stop-color:#b8860b"/>
           </linearGradient>
-          <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <linearGradient id="goldGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#fce38a"/>
+            <stop offset="50%" style="stop-color:#d4a017"/>
+            <stop offset="100%" style="stop-color:#fce38a"/>
+          </linearGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="innerGlow">
+            <feGaussianBlur stdDeviation="1.5" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
         </defs>
-        <circle cx="50" cy="50" r="46" fill="none" stroke="url(#goldGrad)" stroke-width="2.5" filter="url(#glow)"/>
-        <circle cx="50" cy="50" r="40" fill="none" stroke="url(#goldGrad)" stroke-width="0.5" opacity="0.5"/>
-        <!-- Spade -->
-        <path d="M50 20 C50 20, 28 42, 28 55 C28 63, 35 68, 42 65 C45 63.5, 48 62, 50 65 C52 62, 55 63.5, 58 65 C65 68, 72 63, 72 55 C72 42, 50 20, 50 20Z" fill="url(#goldGrad)" filter="url(#glow)"/>
-        <rect x="47" y="62" width="6" height="12" rx="1" fill="url(#goldGrad)"/>
-        <!-- Stars -->
-        <text x="18" y="30" font-size="7" fill="#d4a017" opacity="0.7">✦</text>
-        <text x="76" y="30" font-size="7" fill="#d4a017" opacity="0.7">✦</text>
-        <text x="18" y="78" font-size="7" fill="#d4a017" opacity="0.7">✦</text>
-        <text x="76" y="78" font-size="7" fill="#d4a017" opacity="0.7">✦</text>
+        <!-- Outer shield -->
+        <path d="M100 8 L185 50 L185 120 Q185 170 100 195 Q15 170 15 120 L15 50 Z" fill="none" stroke="url(#goldGrad)" stroke-width="3" filter="url(#glow)"/>
+        <path d="M100 18 L175 55 L175 118 Q175 162 100 185 Q25 162 25 118 L25 55 Z" fill="none" stroke="url(#goldGrad)" stroke-width="1" opacity="0.4"/>
+        <!-- Inner dark fill -->
+        <path d="M100 22 L172 57 L172 117 Q172 159 100 181 Q28 159 28 117 L28 57 Z" fill="#0c0f14" opacity="0.85"/>
+        <!-- Center spade - large -->
+        <path d="M100 45 C100 45, 62 82, 62 102 C62 116, 74 124, 86 119 C91 117, 96 115, 100 120 C104 115, 109 117, 114 119 C126 124, 138 116, 138 102 C138 82, 100 45, 100 45Z" fill="url(#goldGrad)" filter="url(#innerGlow)"/>
+        <path d="M94 117 L94 140 Q94 146 100 146 Q106 146 106 140 L106 117" fill="url(#goldGrad)"/>
+        <!-- Small suits around the spade -->
+        <text x="52" y="68" font-size="14" fill="#d4a017" opacity="0.6" text-anchor="middle">♣</text>
+        <text x="148" y="68" font-size="14" fill="#d4a017" opacity="0.6" text-anchor="middle">♦</text>
+        <text x="52" y="155" font-size="14" fill="#d4a017" opacity="0.6" text-anchor="middle">♥</text>
+        <text x="148" y="155" font-size="14" fill="#d4a017" opacity="0.6" text-anchor="middle">♠</text>
+        <!-- Top banner: A P C -->
+        <text x="100" y="168" font-family="Cinzel, serif" font-weight="700" font-size="16" fill="url(#goldGrad2)" text-anchor="middle" letter-spacing="8">A P C</text>
+        <!-- Corner decorations -->
+        <circle cx="100" cy="34" r="2" fill="#d4a017" opacity="0.5"/>
+        <line x1="70" y1="36" x2="84" y2="36" stroke="#d4a017" stroke-width="0.8" opacity="0.3"/>
+        <line x1="116" y1="36" x2="130" y2="36" stroke="#d4a017" stroke-width="0.8" opacity="0.3"/>
       </svg>
     </div>
-    <h1>Almere Poker Club</h1>
+    <div class="club-name">
+      Almere
+      <span class="word-poker">Poker</span>
+      Club
+    </div>
     <div class="subtitle">Est. 2025 · Netherlands</div>
-    <div class="suits">♠ ♥ ♦ ♣</div>
-    <div class="divider-ornament">━━━ ✦ ━━━</div>
+    <div class="suit-divider">
+      <span class="line"></span>
+      <span class="suits-mini">♠ ♥ ♦ ♣</span>
+      <span class="line"></span>
+    </div>
   </div>
 
   <!-- Identity Selector -->
   <div class="identity-overlay" id="identityOverlay">
     <div class="identity-box">
-      <div class="id-crest">♠</div>
-      <h2>Almere Poker Club</h2>
+      <div class="id-crest" style="font-size:2rem;filter:drop-shadow(0 0 8px rgba(232,183,49,0.2))">♠</div>
+      <h2 style="font-family:'Cinzel Decorative',serif;letter-spacing:3px">Almere Poker Club</h2>
       <div class="id-sub">Welcome</div>
       <p>Who's at the table?</p>
       <select id="identitySelect"><option value="">Select your name...</option></select>
