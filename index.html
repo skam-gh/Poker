@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Poker Night Tracker</title>
+<title>Almere Poker Club</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0c0f14;
@@ -49,15 +49,58 @@
 
   .app { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 24px 20px 60px; }
 
-  .header { text-align: center; padding: 32px 0 28px; }
+  .header { text-align: center; padding: 40px 0 32px; position: relative; }
+  .header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 120px; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 200px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+  }
+  .header .club-crest {
+    font-size: 2.4rem;
+    margin-bottom: 8px;
+    filter: drop-shadow(0 0 12px rgba(232,183,49,0.3));
+  }
   .header h1 {
     font-family: 'Playfair Display', serif;
-    font-weight: 900; font-size: 2.6rem;
-    color: var(--accent); letter-spacing: -1px;
-    text-shadow: 0 0 40px rgba(232,183,49,0.2);
+    font-weight: 900; font-size: 2.8rem;
+    color: var(--accent); letter-spacing: 2px;
+    text-transform: uppercase;
+    text-shadow: 0 0 40px rgba(232,183,49,0.25), 0 2px 4px rgba(0,0,0,0.3);
+    background: linear-gradient(180deg, #f5d96b 0%, #d4a017 50%, #e8b731 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
-  .header p { color: var(--text-dim); font-size: 0.95rem; margin-top: 6px; }
-  .header .suits { font-size: 1.2rem; letter-spacing: 6px; margin-top: 4px; opacity: 0.4; }
+  .header .subtitle {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+  .header .suits {
+    font-size: 1rem; letter-spacing: 8px; margin-top: 12px; opacity: 0.35;
+  }
+  .header .divider-ornament {
+    margin-top: 10px;
+    font-size: 0.7rem;
+    color: var(--accent);
+    letter-spacing: 4px;
+    opacity: 0.5;
+  }
 
   .section {
     background: var(--surface); border: 1px solid var(--border);
@@ -248,6 +291,35 @@
   .modal p { font-size: 0.9rem; color: var(--text-dim); margin-bottom: 16px; line-height: 1.5; }
   .modal .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
+  /* Transfer items */
+  .transfer-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px; border-radius: var(--radius-sm);
+    background: var(--bg); border: 1px solid var(--border);
+    margin-bottom: 8px; transition: background 0.15s;
+  }
+  .transfer-item:hover { background: var(--surface-hover); }
+  .transfer-item .t-number {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent-dim); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.78rem; font-weight: 700; flex-shrink: 0;
+  }
+  .transfer-item .t-from { font-weight: 700; color: var(--red); }
+  .transfer-item .t-arrow { color: var(--text-muted); font-size: 1.1rem; }
+  .transfer-item .t-to { font-weight: 700; color: var(--green); }
+  .transfer-item .t-amount {
+    margin-left: auto; font-weight: 700; font-size: 1.05rem;
+    color: var(--accent); white-space: nowrap;
+  }
+  .all-settled-banner {
+    text-align: center; padding: 20px;
+    background: var(--green-dim); border: 1px solid rgba(52,211,153,0.2);
+    border-radius: var(--radius-sm); margin-top: 8px;
+  }
+  .all-settled-banner .big-check { font-size: 2rem; margin-bottom: 6px; }
+  .all-settled-banner .settled-text { font-weight: 700; color: var(--green); font-size: 1.05rem; }
+
   @media (max-width: 640px) {
     .header h1 { font-size: 1.9rem; }
     .section { padding: 16px; }
@@ -268,16 +340,18 @@
 
 <div class="app">
   <div class="header">
-    <h1>Poker Night</h1>
+    <div class="club-crest">♠</div>
+    <h1>Almere Poker Club</h1>
+    <div class="subtitle">Est. 2025 · Netherlands</div>
     <div class="suits">♠ ♥ ♦ ♣</div>
-    <p>Track borrows, returns & settlements</p>
+    <div class="divider-ornament">━━━ ✦ ━━━</div>
   </div>
 
   <div class="stats-bar">
     <div class="stat-item"><div class="stat-value" id="statPlayers">0</div><div class="stat-label">Players</div></div>
-    <div class="stat-item"><div class="stat-value" id="statBorrowed">₹0</div><div class="stat-label">Total Borrowed</div></div>
-    <div class="stat-item"><div class="stat-value" id="statReturned">₹0</div><div class="stat-label">Total Returned</div></div>
-    <div class="stat-item"><div class="stat-value" id="statOutstanding">₹0</div><div class="stat-label">Outstanding</div></div>
+    <div class="stat-item"><div class="stat-value" id="statBorrowed">€0</div><div class="stat-label">Total Borrowed</div></div>
+    <div class="stat-item"><div class="stat-value" id="statReturned">€0</div><div class="stat-label">Total Returned</div></div>
+    <div class="stat-item"><div class="stat-value" id="statOutstanding">€0</div><div class="stat-label">Outstanding</div></div>
   </div>
 
   <div class="tabs">
@@ -307,7 +381,7 @@
       <select id="actionType"><option value="borrow">Borrow</option><option value="return">Return</option></select>
     </div>
     <div class="input-row">
-      <input type="number" id="actionAmount" placeholder="Amount (₹)" min="1" onkeydown="if(event.key==='Enter') recordAction()">
+      <input type="number" id="actionAmount" placeholder="Amount (€)" min="1" onkeydown="if(event.key==='Enter') recordAction()">
       <button class="btn btn-primary" onclick="recordAction()">Record</button>
     </div>
     <div id="actionMsg" style="font-size:0.85rem;margin-top:8px;min-height:20px"></div>
@@ -326,6 +400,13 @@
   <div id="tab-settlement" class="section" style="display:none">
     <div class="section-title"><span class="icon">🏦</span> Settlement</div>
     <div id="settlementGrid" class="settlement-grid"></div>
+    <div id="transfersSection" style="display:none; margin-top: 24px;">
+      <div class="section-title" style="border-top: 1px solid var(--border); padding-top: 20px;">
+        <span class="icon">🤝</span> Who Pays Whom
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-dim); margin-bottom: 14px;">Minimum transactions to settle all debts:</p>
+      <div id="transfersList"></div>
+    </div>
   </div>
 
   <!-- Backup -->
@@ -428,12 +509,12 @@ function getPlayerTotals(name) {
   return { borrowed, returned, net: borrowed - returned };
 }
 
-function formatCurrency(n) { return '₹' + n.toLocaleString('en-IN'); }
+function formatCurrency(n) { return '€' + n.toLocaleString('nl-NL'); }
 
 function formatDateTime(iso) {
   const d = new Date(iso);
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' +
-         d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  return d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' +
+         d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
 function getInitials(name) { return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2); }
@@ -538,9 +619,16 @@ function deleteTransaction(id) {
 
 function renderSettlement() {
   const grid = document.getElementById('settlementGrid');
+  const transfersSection = document.getElementById('transfersSection');
+  const transfersList = document.getElementById('transfersList');
+
   if (data.players.length === 0) {
-    grid.innerHTML = '<div class="empty-state"><div class="big-icon">🏦</div>Add players and record transactions to see settlements</div>'; return;
+    grid.innerHTML = '<div class="empty-state"><div class="big-icon">🏦</div>Add players and record transactions to see settlements</div>';
+    transfersSection.style.display = 'none';
+    return;
   }
+
+  // Render individual balance cards
   grid.innerHTML = data.players.map(name => {
     const t = getPlayerTotals(name);
     let cls, label, amt;
@@ -549,6 +637,60 @@ function renderSettlement() {
     else { cls = 'settled'; label = 'All settled!'; amt = '✓'; }
     return `<div class="settlement-card ${cls}"><div class="s-name">${name}</div><div class="s-amount">${amt}</div><div class="s-label">${label}</div></div>`;
   }).join('');
+
+  // Calculate optimal transfers (who pays whom)
+  const debtors = []; // people who owe (net > 0)
+  const creditors = []; // people owed (net < 0)
+
+  data.players.forEach(name => {
+    const t = getPlayerTotals(name);
+    if (t.net > 0) debtors.push({ name, amount: t.net });
+    else if (t.net < 0) creditors.push({ name, amount: -t.net });
+  });
+
+  // Sort both by amount descending for efficient matching
+  debtors.sort((a, b) => b.amount - a.amount);
+  creditors.sort((a, b) => b.amount - a.amount);
+
+  const transfers = [];
+  let di = 0, ci = 0;
+
+  while (di < debtors.length && ci < creditors.length) {
+    const debtor = debtors[di];
+    const creditor = creditors[ci];
+    const settleAmount = Math.min(debtor.amount, creditor.amount);
+
+    if (settleAmount > 0) {
+      transfers.push({
+        from: debtor.name,
+        to: creditor.name,
+        amount: settleAmount
+      });
+    }
+
+    debtor.amount -= settleAmount;
+    creditor.amount -= settleAmount;
+
+    if (debtor.amount === 0) di++;
+    if (creditor.amount === 0) ci++;
+  }
+
+  // Render transfers
+  if (transfers.length === 0) {
+    transfersSection.style.display = 'block';
+    transfersList.innerHTML = '<div class="all-settled-banner"><div class="big-check">✅</div><div class="settled-text">Everyone is settled up!</div></div>';
+  } else {
+    transfersSection.style.display = 'block';
+    transfersList.innerHTML = transfers.map((t, i) => `
+      <div class="transfer-item">
+        <div class="t-number">${i + 1}</div>
+        <span class="t-from">${t.from}</span>
+        <span class="t-arrow">→</span>
+        <span class="t-to">${t.to}</span>
+        <span class="t-amount">${formatCurrency(t.amount)}</span>
+      </div>
+    `).join('');
+  }
 }
 
 function updateStats() {
