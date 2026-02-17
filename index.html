@@ -491,10 +491,9 @@
     <div class="section-title"><span class="icon">👥</span> Players</div>
     <div class="input-row">
       <input type="text" id="playerName" placeholder="Enter player name..." maxlength="20" onkeydown="if(event.key==='Enter') addPlayer()">
+      <button class="btn btn-secondary" onclick="openNewPlayerIconPicker()" id="newPlayerIconBtn" title="Pick icon">🎨 <span id="newPlayerIconPreview"></span></button>
       <button class="btn btn-primary" onclick="addPlayer()">Add Player</button>
     </div>
-    <div class="avatar-section-label">Choose an icon</div>
-    <div class="avatar-picker" id="avatarPicker"></div>
     <div id="playerCount" style="font-size:0.82rem;color:var(--text-dim);margin-bottom:12px"></div>
     <div id="playersTableWrap"></div>
   </div>
@@ -678,22 +677,6 @@ const PLAYER_ICONS = {
 };
 let selectedIcon = null;
 
-function renderAvatarPicker() {
-  const picker = document.getElementById('avatarPicker');
-  let html = '';
-  Object.entries(PLAYER_ICONS).forEach(([cat, icons]) => {
-    icons.forEach(icon => {
-      html += `<div class="avatar-option${selectedIcon === icon ? ' selected' : ''}" onclick="selectIcon('${icon}')">${icon}</div>`;
-    });
-  });
-  picker.innerHTML = html;
-}
-
-function selectIcon(icon) {
-  selectedIcon = (selectedIcon === icon) ? null : icon;
-  renderAvatarPicker();
-}
-
 function getPlayerIcon(nameStr) {
   const p = getPlayerObj(nameStr);
   return (p && p.icon) ? p.icon : null;
@@ -707,8 +690,22 @@ function addPlayer() {
   if (getPlayerNames().find(n => n.toLowerCase() === name.toLowerCase())) return showToast('Player already exists!');
   data.players.push({ name, addedAt: new Date().toISOString(), icon: selectedIcon || null });
   saveData(); input.value = ''; selectedIcon = null;
-  renderAvatarPicker(); renderPlayers(); updateStats();
+  updateNewPlayerIconBtn(); renderPlayers(); updateStats();
   showToast(name + ' joined the table!');
+}
+
+function updateNewPlayerIconBtn() {
+  document.getElementById('newPlayerIconPreview').textContent = selectedIcon || '';
+}
+
+// Opens the icon picker modal for a NEW player being added
+function openNewPlayerIconPicker() {
+  iconPickerTarget = '__new__';
+  iconPickerSelected = selectedIcon;
+  document.getElementById('iconPickerName').textContent = 'new player';
+  updateIconPickerPreview();
+  renderIconPickerGrids();
+  document.getElementById('iconPickerModal').classList.add('active');
 }
 
 function getPlayerName(p) { return typeof p === 'string' ? p : p.name; }
@@ -761,6 +758,13 @@ function updateIconPickerPreview() {
 
 function confirmIconPicker() {
   if (!iconPickerTarget) return;
+  if (iconPickerTarget === '__new__') {
+    // Setting icon for a new player (not yet added)
+    selectedIcon = iconPickerSelected;
+    updateNewPlayerIconBtn();
+    cancelIconPicker();
+    return;
+  }
   const p = getPlayerObj(iconPickerTarget);
   if (p) { p.icon = iconPickerSelected; saveData(); }
   renderPlayers(); updateStats();
@@ -797,8 +801,8 @@ function renderPlayers() {
     const addedDate = getPlayerAddedDate(name);
     const icon = getPlayerIcon(name);
     const avatarHtml = icon
-      ? `<div class="player-avatar" style="background:transparent;font-size:1.3rem">${icon}</div>`
-      : `<div class="player-avatar">${getInitials(name)}</div>`;
+      ? `<div class="player-avatar" style="background:transparent;font-size:1.3rem;cursor:pointer" onclick="changePlayerIcon('${esc}')" title="Change icon">${icon}</div>`
+      : `<div class="player-avatar" style="cursor:pointer" onclick="changePlayerIcon('${esc}')" title="Change icon">${getInitials(name)}</div>`;
     html += `<tr>
       <td><div class="player-name">${avatarHtml}${name}</div></td>
       <td style="font-size:0.8rem;color:var(--text-dim)">${addedDate}</td>
@@ -806,7 +810,6 @@ function renderPlayers() {
       <td class="${balClass}">${balText}</td>
       <td><span class="borrow-count${todayCount >= 10 ? ' maxed' : ''}">${todayCount}/10</span></td>
       <td>
-        <button class="btn btn-secondary btn-sm" onclick="changePlayerIcon('${esc}')" title="Change icon" style="margin-right:4px">🎨</button>
         <button class="btn btn-danger btn-sm" onclick="removePlayer('${esc}')">✕</button>
       </td>
     </tr>`;
@@ -1114,7 +1117,7 @@ function updatePersonalStat() {
 
 // ─── Init ───
 function init() {
-  renderPlayers(); updateStats(); renderAvatarPicker();
+  renderPlayers(); updateStats();
   // Check if saved identity is still a valid player
   if (currentPlayer && getPlayerNames().includes(currentPlayer)) {
     document.getElementById('identityOverlay').classList.add('hidden');
