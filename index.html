@@ -429,6 +429,49 @@
     background: linear-gradient(135deg, var(--surface) 0%, rgba(232,183,49,0.08) 100%);
   }
 
+  /* Admin styles */
+  .admin-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 0.78rem; font-weight: 600;
+    color: #f59e0b; background: rgba(245,158,11,0.12);
+    padding: 3px 10px; border-radius: 20px;
+    border: 1px solid rgba(245,158,11,0.25);
+  }
+  .admin-locked {
+    opacity: 0.4; pointer-events: none; position: relative;
+  }
+  .admin-lock-msg {
+    font-size: 0.82rem; color: var(--text-muted);
+    text-align: center; padding: 16px;
+    background: var(--bg); border-radius: var(--radius-sm);
+    border: 1px dashed var(--border); margin-top: 8px;
+  }
+  .admin-lock-msg .lock-icon { font-size: 1.2rem; margin-bottom: 4px; }
+  .pin-input-group {
+    display: flex; gap: 8px; justify-content: center; margin: 16px 0;
+  }
+  .pin-input-group input {
+    width: 48px; height: 56px; text-align: center;
+    font-size: 1.4rem; font-weight: 700; font-family: 'Cinzel', serif;
+    background: var(--bg); border: 2px solid var(--border);
+    color: var(--accent); border-radius: var(--radius-sm);
+    outline: none; transition: border-color 0.2s;
+    -webkit-text-security: disc;
+  }
+  .pin-input-group input:focus { border-color: var(--accent); }
+  .admin-toggle {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: var(--radius-sm);
+    background: none; border: 1px solid var(--border);
+    color: var(--text-dim); font-family: inherit; font-size: 0.82rem;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .admin-toggle:hover { border-color: var(--text-muted); color: var(--text); }
+  .admin-toggle.active {
+    border-color: #f59e0b; color: #f59e0b;
+    background: rgba(245,158,11,0.08);
+  }
+
   @media (max-width: 640px) {
     .header .club-name { font-size: 1.5rem; }
     .header .club-name .word-poker { font-size: 2.2rem; letter-spacing: 6px; }
@@ -522,8 +565,11 @@
 
   <!-- Identity Bar -->
   <div class="identity-bar" id="identityBar" style="display:none">
-    <div class="ib-name"><span>♠</span> Logged in as: <strong id="identityName"></strong></div>
-    <button class="ib-change" onclick="changeIdentity()">Switch Player</button>
+    <div class="ib-name"><span>♠</span> Logged in as: <strong id="identityName"></strong> <span id="adminBadge" class="admin-badge" style="display:none">🔑 Admin</span></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="admin-toggle" id="adminToggle" onclick="toggleAdmin()">🔒 Admin</button>
+      <button class="ib-change" onclick="changeIdentity()">Switch Player</button>
+    </div>
   </div>
 
   <div class="stats-bar">
@@ -543,6 +589,7 @@
     <button class="tab" onclick="switchTab('history')">History</button>
     <button class="tab" onclick="switchTab('settlement')">Settlement</button>
     <button class="tab" onclick="switchTab('data')">Backup</button>
+    <button class="tab" id="adminTabBtn" onclick="switchTab('admin')" style="display:none">👑 Admin</button>
   </div>
 
   <!-- Players -->
@@ -601,7 +648,7 @@
     </p>
     <div class="data-actions">
       <button class="btn btn-primary" onclick="exportData()">📤 Export Data</button>
-      <button class="btn btn-outline" onclick="document.getElementById('importFile').click()">📥 Import Backup</button>
+      <button class="btn btn-outline" onclick="if(requireAdmin()) document.getElementById('importFile').click()">📥 Import Backup</button>
       <input type="file" id="importFile" class="file-input-hidden" accept=".json" onchange="importData(event)">
     </div>
     <div id="backupStatus" class="backup-status"></div>
@@ -613,9 +660,15 @@
     </div>
   </div>
 
+  <!-- Admin Panel (Owner only) -->
+  <div id="tab-admin" class="section" style="display:none">
+    <div class="section-title"><span class="icon">👑</span> Owner Panel</div>
+    <div id="adminPanelContent"></div>
+  </div>
+
   <div class="footer">
     <p>Data auto-saved to browser · Export backups for long-term safety</p>
-    <button class="clear-all" onclick="clearAllData()">⚠ Clear All Data</button>
+    <button class="clear-all" onclick="clearAllData()">👑 Clear All Data (Owner Only)</button>
   </div>
 </div>
 
@@ -655,6 +708,33 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Admin Role Select Modal -->
+<div class="modal-overlay" id="adminRoleModal">
+  <div class="modal" style="max-width:380px" id="adminRoleContent"></div>
+</div>
+
+<!-- Admin PIN Modal -->
+<div class="modal-overlay" id="adminPinModal">
+  <div class="modal" style="max-width:380px">
+    <h3 id="adminPinTitle">🔑 Enter Admin PIN</h3>
+    <p id="adminPinMsg">Enter your 4-digit PIN to unlock admin controls.</p>
+    <div class="pin-input-group" id="pinInputGroup">
+      <input type="tel" maxlength="1" class="pin-digit" data-idx="0" oninput="pinDigitInput(this)" onkeydown="pinDigitKeydown(event, this)">
+      <input type="tel" maxlength="1" class="pin-digit" data-idx="1" oninput="pinDigitInput(this)" onkeydown="pinDigitKeydown(event, this)">
+      <input type="tel" maxlength="1" class="pin-digit" data-idx="2" oninput="pinDigitInput(this)" onkeydown="pinDigitKeydown(event, this)">
+      <input type="tel" maxlength="1" class="pin-digit" data-idx="3" oninput="pinDigitInput(this)" onkeydown="pinDigitKeydown(event, this)">
+    </div>
+    <div id="pinError" style="color:var(--red);font-size:0.85rem;text-align:center;min-height:20px;margin-bottom:12px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="cancelAdminPin()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitAdminPin()">Confirm</button>
+    </div>
+    <div id="pinResetOption" style="display:none;margin-top:12px;text-align:center">
+      <span style="font-size:0.82rem;color:var(--text-muted);cursor:pointer;text-decoration:underline" onclick="resetAdminPin()">Forgot PIN? Reset</span>
+    </div>
+  </div>
+</div>
+
 <script>
 const STORAGE_KEY = 'poker_tracker_v2';
 const APP_VERSION = '2.0';
@@ -692,14 +772,16 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-const ALL_TABS = ['players','actions','history','settlement','data'];
+const ALL_TABS = ['players','actions','history','settlement','data','admin'];
 function switchTab(tab) {
+  if (tab === 'admin' && !isOwner()) { showToast('👑 Owner access required'); return; }
   document.querySelectorAll('.tab').forEach((el, i) => el.classList.toggle('active', ALL_TABS[i] === tab));
-  ALL_TABS.forEach(t => document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none');
+  ALL_TABS.forEach(t => { const el = document.getElementById('tab-' + t); if (el) el.style.display = t === tab ? 'block' : 'none'; });
   if (tab === 'history') renderHistory();
   if (tab === 'settlement') renderSettlement();
   if (tab === 'actions') updateActionDropdown();
   if (tab === 'data') updateBackupStatus();
+  if (tab === 'admin') renderAdminPanel();
 }
 
 function getToday() { return new Date().toISOString().split('T')[0]; }
@@ -776,9 +858,11 @@ function getPlayerAddedDate(nameStr) {
 function getPlayerNames() { return data.players.map(p => getPlayerName(p)); }
 
 function removePlayer(name) {
+  if (!requireAdmin()) return;
   if (!confirm('Remove ' + name + '? Transaction history will be kept.')) return;
   data.players = data.players.filter(p => getPlayerName(p) !== name);
   saveData(); renderPlayers(); updateStats();
+  logAdminAction(`Removed player "${name}"`);
   showToast(name + ' removed');
 }
 
@@ -869,7 +953,7 @@ function renderPlayers() {
       <td class="${balClass}">${balText}</td>
       <td><span class="borrow-count${todayCount >= 10 ? ' maxed' : ''}">${todayCount}/10</span></td>
       <td>
-        <button class="btn btn-danger btn-sm" onclick="removePlayer('${esc}')">✕</button>
+        ${isAdminAny() ? `<button class="btn btn-danger btn-sm" onclick="removePlayer('${esc}')">✕</button>` : ''}
       </td>
     </tr>`;
   });
@@ -919,14 +1003,17 @@ function renderHistory() {
       <span class="time">${formatDateTime(t.timestamp)}</span>
       <span class="detail"><strong>${t.player}</strong> ${t.type === 'borrow' ? 'borrowed' : 'returned'}</span>
       <span class="h-amount">${t.type === 'borrow' ? '-' : '+'}${formatCurrency(t.amount)}</span>
-      <button class="delete-btn" onclick="deleteTransaction('${t.id}')" title="Delete">✕</button>
+      ${isAdminAny() ? `<button class="delete-btn" onclick="deleteTransaction('${t.id}')" title="Delete">✕</button>` : ''}
     </div>`).join('');
 }
 
 function deleteTransaction(id) {
+  if (!requireAdmin()) return;
   if (!confirm('Delete this transaction?')) return;
+  const txn = data.transactions.find(t => t.id === id);
   data.transactions = data.transactions.filter(t => t.id !== id);
   saveData(); renderHistory(); renderPlayers(); updateStats();
+  if (txn) logAdminAction(`Deleted ${txn.type} of ${formatCurrency(txn.amount)} by "${txn.player}"`);
   showToast('Transaction deleted');
 }
 
@@ -1096,8 +1183,10 @@ function updateBackupStatus() {
 }
 
 function clearAllData() {
+  if (!requireOwner()) return;
   if (!confirm('Delete ALL data? This cannot be undone! (Export a backup first)')) return;
-  if (!confirm('Are you absolutely sure?')) return;
+  if (!confirm('Are you absolutely sure? Only the Owner can do this.')) return;
+  logAdminAction('WIPED ALL DATA');
   data = { version: APP_VERSION, createdAt: new Date().toISOString(), players: [], transactions: [] };
   saveData(); renderPlayers(); updateStats();
   showToast('All data cleared');
@@ -1174,9 +1263,381 @@ function updatePersonalStat() {
   }
 }
 
+// ─── Admin System: Owner + Moderators ───
+const ADMIN_KEYS = {
+  owner: 'poker_owner_pin',
+  mods: 'poker_moderators',    // JSON array of {name, pinHash}
+  auditLog: 'poker_audit_log', // JSON array of {timestamp, actor, actorRole, action}
+  session: 'poker_admin_session' // sessionStorage: {role, name}
+};
+
+let adminRole = null;   // null, 'owner', 'mod'
+let adminName = null;   // name of logged-in admin/mod
+let adminPinMode = null; // 'owner-setup','owner-login','mod-login','add-mod-pin','reset-owner'
+
+function hashPin(pin, salt) {
+  let hash = 0;
+  const str = 'APC_' + (salt || '') + '_' + pin + '_2025';
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + ch;
+    hash = hash & hash;
+  }
+  return 'h_' + Math.abs(hash).toString(36);
+}
+
+function getOwnerPin() { return localStorage.getItem(ADMIN_KEYS.owner); }
+function hasOwner() { return !!getOwnerPin(); }
+function verifyOwnerPin(pin) { return hashPin(pin, 'owner') === getOwnerPin(); }
+
+function getMods() {
+  try { return JSON.parse(localStorage.getItem(ADMIN_KEYS.mods)) || []; } catch(e) { return []; }
+}
+function saveMods(mods) { localStorage.setItem(ADMIN_KEYS.mods, JSON.stringify(mods)); }
+
+function getAuditLog() {
+  try { return JSON.parse(localStorage.getItem(ADMIN_KEYS.auditLog)) || []; } catch(e) { return []; }
+}
+function saveAuditLog(log) { localStorage.setItem(ADMIN_KEYS.auditLog, JSON.stringify(log)); }
+
+function logAdminAction(action) {
+  const log = getAuditLog();
+  log.push({
+    timestamp: new Date().toISOString(),
+    actor: adminName || 'Owner',
+    role: adminRole || 'owner',
+    action
+  });
+  // Keep last 200 entries
+  if (log.length > 200) log.splice(0, log.length - 200);
+  saveAuditLog(log);
+}
+
+function isOwner() { return adminRole === 'owner'; }
+function isMod() { return adminRole === 'mod'; }
+function isAdminAny() { return adminRole === 'owner' || adminRole === 'mod'; }
+
+// ─── PIN Modal Logic ───
+let pendingModName = '';
+
+function toggleAdmin() {
+  if (isAdminAny()) {
+    adminRole = null; adminName = null;
+    sessionStorage.removeItem(ADMIN_KEYS.session);
+    updateAdminUI(); renderPlayers(); renderHistory();
+    showToast('Admin mode deactivated');
+    return;
+  }
+  // Show role selection
+  showAdminRoleSelect();
+}
+
+function showAdminRoleSelect() {
+  const mods = getMods();
+  const hasOwnerSetup = hasOwner();
+  let html = '<h3>🔑 Admin Login</h3>';
+  html += '<p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:16px">Select your role:</p>';
+  html += `<button class="btn btn-primary" style="width:100%;margin-bottom:10px;padding:14px" onclick="startAdminLogin('owner')">
+    👑 Owner${!hasOwnerSetup ? ' (First-time Setup)' : ''}
+  </button>`;
+  if (mods.length > 0) {
+    mods.forEach(m => {
+      html += `<button class="btn btn-secondary" style="width:100%;margin-bottom:8px;padding:12px" onclick="startAdminLogin('mod','${m.name.replace(/'/g,"\\'")}')">
+        🛡️ ${m.name} (Moderator)
+      </button>`;
+    });
+  }
+  html += `<div style="margin-top:14px;text-align:center">
+    <span style="font-size:0.82rem;color:var(--text-muted);cursor:pointer" onclick="cancelAdminPin()">Cancel</span>
+  </div>`;
+  document.getElementById('adminRoleContent').innerHTML = html;
+  document.getElementById('adminRoleModal').classList.add('active');
+}
+
+function startAdminLogin(role, modName) {
+  document.getElementById('adminRoleModal').classList.remove('active');
+  if (role === 'owner') {
+    if (!hasOwner()) {
+      adminPinMode = 'owner-setup';
+      document.getElementById('adminPinTitle').textContent = '👑 Set Owner PIN';
+      document.getElementById('adminPinMsg').textContent = 'Create your 4-digit Owner PIN. Only you can wipe data and manage moderators.';
+      document.getElementById('pinResetOption').style.display = 'none';
+    } else {
+      adminPinMode = 'owner-login';
+      document.getElementById('adminPinTitle').textContent = '👑 Owner PIN';
+      document.getElementById('adminPinMsg').textContent = 'Enter your Owner PIN.';
+      document.getElementById('pinResetOption').style.display = 'block';
+    }
+  } else {
+    pendingModName = modName;
+    adminPinMode = 'mod-login';
+    document.getElementById('adminPinTitle').textContent = '🛡️ Moderator PIN';
+    document.getElementById('adminPinMsg').textContent = `Enter PIN for ${modName}`;
+    document.getElementById('pinResetOption').style.display = 'none';
+  }
+  clearPinInputs();
+  document.getElementById('pinError').textContent = '';
+  document.getElementById('adminPinModal').classList.add('active');
+  setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+}
+
+function pinDigitInput(el) {
+  const val = el.value.replace(/\D/g, '');
+  el.value = val;
+  if (val && parseInt(el.dataset.idx) < 3) {
+    const next = document.querySelector(`.pin-digit[data-idx="${parseInt(el.dataset.idx) + 1}"]`);
+    if (next) next.focus();
+  }
+  const allFilled = Array.from(document.querySelectorAll('.pin-digit')).every(d => d.value.length === 1);
+  if (allFilled) submitAdminPin();
+}
+
+function pinDigitKeydown(e, el) {
+  if (e.key === 'Backspace' && !el.value && parseInt(el.dataset.idx) > 0) {
+    const prev = document.querySelector(`.pin-digit[data-idx="${parseInt(el.dataset.idx) - 1}"]`);
+    if (prev) { prev.focus(); prev.value = ''; }
+    e.preventDefault();
+  }
+}
+
+function clearPinInputs() {
+  document.querySelectorAll('.pin-digit').forEach(d => d.value = '');
+}
+
+function getPinValue() {
+  return Array.from(document.querySelectorAll('.pin-digit')).map(d => d.value).join('');
+}
+
+function submitAdminPin() {
+  const pin = getPinValue();
+  const err = document.getElementById('pinError');
+  if (pin.length !== 4) { err.textContent = 'Enter all 4 digits'; return; }
+
+  if (adminPinMode === 'owner-setup') {
+    localStorage.setItem(ADMIN_KEYS.owner, hashPin(pin, 'owner'));
+    adminRole = 'owner'; adminName = 'Owner';
+    sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role: 'owner', name: 'Owner' }));
+    logAdminAction('Owner PIN created');
+    cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
+    showToast('👑 Owner PIN set! You have full control.');
+
+  } else if (adminPinMode === 'owner-login') {
+    if (verifyOwnerPin(pin)) {
+      adminRole = 'owner'; adminName = 'Owner';
+      sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role: 'owner', name: 'Owner' }));
+      logAdminAction('Owner logged in');
+      cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
+      showToast('👑 Owner mode activated!');
+    } else {
+      err.textContent = 'Wrong PIN.';
+      clearPinInputs();
+      document.querySelector('.pin-digit[data-idx="0"]').focus();
+    }
+
+  } else if (adminPinMode === 'mod-login') {
+    const mods = getMods();
+    const mod = mods.find(m => m.name === pendingModName);
+    if (mod && hashPin(pin, mod.name) === mod.pinHash) {
+      adminRole = 'mod'; adminName = mod.name;
+      sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role: 'mod', name: mod.name }));
+      logAdminAction(`Moderator "${mod.name}" logged in`);
+      cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
+      showToast(`🛡️ Moderator mode: ${mod.name}`);
+    } else {
+      err.textContent = 'Wrong PIN.';
+      clearPinInputs();
+      document.querySelector('.pin-digit[data-idx="0"]').focus();
+    }
+
+  } else if (adminPinMode === 'add-mod-pin') {
+    const mods = getMods();
+    mods.push({ name: pendingModName, pinHash: hashPin(pin, pendingModName), addedAt: new Date().toISOString() });
+    saveMods(mods);
+    logAdminAction(`Added moderator "${pendingModName}"`);
+    cancelAdminPin();
+    showToast(`🛡️ ${pendingModName} added as moderator!`);
+    if (document.getElementById('tab-admin').style.display !== 'none') renderAdminPanel();
+
+  } else if (adminPinMode === 'reset-owner') {
+    localStorage.setItem(ADMIN_KEYS.owner, hashPin(pin, 'owner'));
+    adminRole = 'owner'; adminName = 'Owner';
+    sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role: 'owner', name: 'Owner' }));
+    logAdminAction('Owner PIN was reset');
+    cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
+    showToast('👑 Owner PIN reset!');
+  }
+}
+
+function cancelAdminPin() {
+  adminPinMode = null; pendingModName = '';
+  clearPinInputs();
+  document.getElementById('adminPinModal').classList.remove('active');
+}
+
+function resetAdminPin() {
+  cancelAdminPin();
+  if (!confirm('To reset your Owner PIN, you must verify with your current PIN first. If you truly forgot it, the only option is clearing browser data.\n\nProceed to set a new PIN?')) return;
+  adminPinMode = 'reset-owner';
+  document.getElementById('adminPinTitle').textContent = '👑 New Owner PIN';
+  document.getElementById('adminPinMsg').textContent = 'Enter a new 4-digit Owner PIN.';
+  document.getElementById('pinResetOption').style.display = 'none';
+  clearPinInputs();
+  document.getElementById('pinError').textContent = '';
+  document.getElementById('adminPinModal').classList.add('active');
+  setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+}
+
+// ─── Admin Panel (Owner only) ───
+function renderAdminPanel() {
+  const panel = document.getElementById('adminPanelContent');
+  if (!isOwner()) {
+    panel.innerHTML = '<div class="admin-lock-msg"><div class="lock-icon">👑</div>Only the Owner can access this panel.</div>';
+    return;
+  }
+
+  const mods = getMods();
+  const log = getAuditLog().reverse().slice(0, 50);
+
+  let html = '';
+
+  // Moderator management
+  html += '<div style="margin-bottom:24px">';
+  html += '<div class="section-title" style="margin-bottom:12px"><span class="icon">🛡️</span> Moderators (' + mods.length + '/3)</div>';
+  if (mods.length === 0) {
+    html += '<p style="color:var(--text-dim);font-size:0.9rem">No moderators yet. Add up to 3 players as moderators.</p>';
+  } else {
+    html += '<div style="display:flex;flex-direction:column;gap:8px">';
+    mods.forEach((m, i) => {
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
+        <div><strong style="color:var(--text)">${m.name}</strong> <span class="admin-badge" style="font-size:0.7rem">🛡️ Mod</span>
+        <br><span style="font-size:0.78rem;color:var(--text-muted)">Added: ${m.addedAt ? formatDateTime(m.addedAt) : 'Unknown'}</span></div>
+        <button class="btn btn-danger btn-sm" onclick="removeMod(${i})">Remove</button>
+      </div>`;
+    });
+    html += '</div>';
+  }
+  if (mods.length < 3) {
+    html += `<div class="input-row" style="margin-top:12px">
+      <select id="addModSelect"><option value="">Select player to make moderator...</option></select>
+      <button class="btn btn-primary" onclick="addModerator()">Add Moderator</button>
+    </div>`;
+  }
+  html += '</div>';
+
+  // Audit log
+  html += '<div>';
+  html += '<div class="section-title" style="margin-bottom:12px;border-top:1px solid var(--border);padding-top:20px"><span class="icon">📝</span> Admin Audit Log</div>';
+  if (log.length === 0) {
+    html += '<p style="color:var(--text-dim);font-size:0.9rem">No admin actions recorded yet.</p>';
+  } else {
+    html += '<div class="history-list" style="max-height:300px">';
+    log.forEach(entry => {
+      const roleIcon = entry.role === 'owner' ? '👑' : '🛡️';
+      html += `<div class="history-item" style="border-left:3px solid ${entry.role === 'owner' ? '#f59e0b' : 'var(--border)'}">
+        <span class="time">${formatDateTime(entry.timestamp)}</span>
+        <span class="detail">${roleIcon} <strong>${entry.actor}</strong></span>
+        <span style="font-size:0.85rem;color:var(--text-dim);flex:2">${entry.action}</span>
+      </div>`;
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+
+  panel.innerHTML = html;
+
+  // Populate mod select dropdown
+  const sel = document.getElementById('addModSelect');
+  if (sel) {
+    const modNames = mods.map(m => m.name.toLowerCase());
+    getPlayerNames().forEach(n => {
+      if (!modNames.includes(n.toLowerCase())) {
+        sel.innerHTML += `<option value="${n}">${n}</option>`;
+      }
+    });
+  }
+}
+
+function addModerator() {
+  const sel = document.getElementById('addModSelect');
+  if (!sel || !sel.value) { showToast('Select a player first'); return; }
+  const mods = getMods();
+  if (mods.length >= 3) { showToast('Maximum 3 moderators!'); return; }
+  if (mods.find(m => m.name.toLowerCase() === sel.value.toLowerCase())) { showToast('Already a moderator!'); return; }
+
+  pendingModName = sel.value;
+  adminPinMode = 'add-mod-pin';
+  document.getElementById('adminPinTitle').textContent = '🛡️ Set Moderator PIN';
+  document.getElementById('adminPinMsg').textContent = `Set a 4-digit PIN for ${pendingModName}. Share this PIN with them privately.`;
+  document.getElementById('pinResetOption').style.display = 'none';
+  clearPinInputs();
+  document.getElementById('pinError').textContent = '';
+  document.getElementById('adminPinModal').classList.add('active');
+  setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+}
+
+function removeMod(index) {
+  if (!isOwner()) return;
+  const mods = getMods();
+  const name = mods[index]?.name;
+  if (!confirm(`Remove ${name} as moderator?`)) return;
+  mods.splice(index, 1);
+  saveMods(mods);
+  logAdminAction(`Removed moderator "${name}"`);
+  renderAdminPanel();
+  showToast(`${name} removed as moderator`);
+}
+
+function updateAdminUI() {
+  const toggle = document.getElementById('adminToggle');
+  const badge = document.getElementById('adminBadge');
+  const adminTab = document.getElementById('adminTabBtn');
+
+  if (isAdminAny()) {
+    toggle.classList.add('active');
+    toggle.innerHTML = isOwner() ? '👑 Owner' : '🛡️ Mod';
+    badge.style.display = 'inline-flex';
+    badge.innerHTML = isOwner() ? '👑 Owner' : '🛡️ Mod';
+    badge.style.borderColor = isOwner() ? 'rgba(245,158,11,0.25)' : 'rgba(99,102,241,0.25)';
+    badge.style.color = isOwner() ? '#f59e0b' : '#818cf8';
+    badge.style.background = isOwner() ? 'rgba(245,158,11,0.12)' : 'rgba(99,102,241,0.12)';
+  } else {
+    toggle.classList.remove('active');
+    toggle.innerHTML = '🔒 Admin';
+    badge.style.display = 'none';
+  }
+
+  // Show/hide admin tab
+  if (adminTab) adminTab.style.display = isOwner() ? '' : 'none';
+}
+
+function requireAdmin() {
+  if (isAdminAny()) return true;
+  showToast('🔒 Admin access required');
+  toggleAdmin();
+  return false;
+}
+
+function requireOwner() {
+  if (isOwner()) return true;
+  showToast('👑 Owner access required');
+  if (!isAdminAny()) toggleAdmin();
+  return false;
+}
+
 // ─── Init ───
 function init() {
-  renderPlayers(); updateStats();
+  // Restore admin session
+  try {
+    const sess = JSON.parse(sessionStorage.getItem(ADMIN_KEYS.session));
+    if (sess && sess.role) {
+      if (sess.role === 'owner' && hasOwner()) { adminRole = 'owner'; adminName = 'Owner'; }
+      else if (sess.role === 'mod') {
+        const mods = getMods();
+        if (mods.find(m => m.name === sess.name)) { adminRole = 'mod'; adminName = sess.name; }
+      }
+    }
+  } catch(e) {}
+  renderPlayers(); updateStats(); updateAdminUI();
   // Check if saved identity is still a valid player
   if (currentPlayer && getPlayerNames().includes(currentPlayer)) {
     document.getElementById('identityOverlay').classList.add('hidden');
