@@ -1110,7 +1110,7 @@ function updateAdminUI() {
     badge.style.background = 'rgba(52,211,153,0.12)';
   } else {
     toggle.classList.remove('active');
-    toggle.innerHTML = '🔒 Login';
+    toggle.innerHTML = hasOwner() ? '🔒 Login' : '🔑 Setup';
     badge.style.display = 'none';
   }
   if (adminTab) adminTab.style.display = isOwner() ? '' : 'none';
@@ -1336,9 +1336,8 @@ function applyAccessControl() {
   // Hide import button (export is fine — read-only)
   const importBtn = document.querySelector('[onclick*="importFile"]');
   if (importBtn) importBtn.style.display = writeOk ? '' : 'none';
-  // Login button: hide if no owner set up yet (nothing to log into)
-  const loginBtn = document.getElementById('adminToggle');
-  if (loginBtn) loginBtn.style.display = hasOwner() || loggedIn ? '' : 'none';
+  // Login button: always visible. If no owner set up, clicking it triggers owner setup.
+  // No need to hide — toggleAdmin handles the logic.
   // Player PIN section: show only for logged-in players (not for admins, not before login)
   const pinSection = document.getElementById('playerPinSection');
   if (pinSection) pinSection.style.display = isPlayerOnly() ? '' : 'none';
