@@ -4,767 +4,517 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Almere Poker Club</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♠</text></svg>">
-<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600;700;900&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #0c0f14;
-    --surface: #161a22;
-    --surface-hover: #1c2029;
-    --card: #1a1f28;
-    --border: #2a303c;
-    --accent: #e8b731;
-    --accent-dim: rgba(232, 183, 49, 0.15);
-    --accent-glow: rgba(232, 183, 49, 0.3);
-    --green: #34d399;
-    --green-dim: rgba(52, 211, 153, 0.15);
-    --red: #f87171;
-    --red-dim: rgba(248, 113, 113, 0.15);
-    --text: #e8eaed;
-    --text-dim: #8b919e;
-    --text-muted: #5a6070;
-    --radius: 12px;
-    --radius-sm: 8px;
-  }
+:root {
+  --bg: #0c0f14;
+  --surface: #161a22;
+  --surface-hover: #1c2029;
+  --card: #1a1f28;
+  --border: #2a303c;
+  --accent: #e8b731;
+  --accent-dim: rgba(232,183,49,0.15);
+  --accent-glow: rgba(232,183,49,0.3);
+  --green: #34d399;
+  --green-dim: rgba(52,211,153,0.15);
+  --red: #f87171;
+  --red-dim: rgba(248,113,113,0.15);
+  --text: #e8eaed;
+  --text-dim: #8b919e;
+  --text-muted: #5a6070;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+body::before { content:''; position:fixed; inset:0; background:radial-gradient(ellipse at 20% 0%,rgba(232,183,49,0.04) 0%,transparent 60%),radial-gradient(ellipse at 80% 100%,rgba(52,211,153,0.03) 0%,transparent 60%); pointer-events:none; z-index:0; }
+.app { position:relative; z-index:1; max-width:960px; margin:0 auto; padding:24px 20px 60px; }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+/* Connection status */
+.conn-status { text-align:center; padding:8px; font-size:0.8rem; border-radius:var(--radius-sm); margin-bottom:12px; display:none; }
+.conn-status.online { display:block; background:var(--green-dim); color:var(--green); }
+.conn-status.offline { display:block; background:var(--red-dim); color:var(--red); }
+.conn-status.loading { display:block; background:var(--accent-dim); color:var(--accent); }
 
-  body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
+/* Header */
+.header { text-align:center; padding:24px 0 20px; }
+.header svg { margin-bottom:8px; }
+.header h1 { font-family:'Cinzel Decorative',serif; font-weight:900; font-size:2rem; color:var(--accent); letter-spacing:2px; text-shadow:0 0 40px rgba(232,183,49,0.2); background:linear-gradient(90deg,#d4a017,#f5d96b,#e8b731,#d4a017); background-size:200% auto; -webkit-background-clip:text; -webkit-text-fill-color:transparent; animation:shimmer 4s linear infinite; }
+@keyframes shimmer { to { background-position:200% center; } }
+.header .subtitle { font-family:'Cinzel',serif; color:var(--text-dim); font-size:0.85rem; margin-top:4px; letter-spacing:3px; }
+.suit-divider { display:flex; align-items:center; gap:12px; justify-content:center; margin-top:6px; }
+.suit-divider .line { flex:0 0 40px; height:1px; background:linear-gradient(90deg,transparent,var(--accent),transparent); opacity:0.3; }
+.suits-mini { color:var(--accent); opacity:0.35; font-size:0.85rem; letter-spacing:4px; }
 
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: radial-gradient(ellipse at 20% 0%, rgba(232,183,49,0.04) 0%, transparent 60%),
-                radial-gradient(ellipse at 80% 100%, rgba(52,211,153,0.03) 0%, transparent 60%);
-    pointer-events: none;
-    z-index: 0;
-  }
+/* Identity bar */
+.identity-bar { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:20px; flex-wrap:wrap; gap:8px; }
+.identity-left { display:flex; align-items:center; gap:10px; }
+.admin-toggle { cursor:pointer; padding:6px 14px; border-radius:20px; background:var(--bg); border:1px solid var(--border); color:var(--text-dim); font-size:0.85rem; transition:all 0.2s; }
+.admin-toggle:hover { border-color:var(--accent); color:var(--accent); }
+.admin-toggle.active { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); }
+.admin-badge { display:none; padding:4px 10px; border-radius:12px; font-size:0.75rem; font-weight:600; border:1px solid rgba(245,158,11,0.25); color:#f59e0b; background:rgba(245,158,11,0.12); }
 
-  .app { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 24px 20px 60px; }
+/* Tabs */
+.tabs { display:flex; gap:4px; margin-bottom:20px; overflow-x:auto; padding-bottom:4px; }
+.tab { flex:1; min-width:0; padding:10px 8px; text-align:center; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text-dim); cursor:pointer; font-size:0.85rem; font-weight:500; transition:all 0.2s; white-space:nowrap; }
+.tab:hover { color:var(--text); border-color:var(--text-muted); }
+.tab.active { color:var(--accent); border-color:var(--accent); background:var(--accent-dim); }
 
-  .header { text-align: center; padding: 44px 0 36px; position: relative; }
-  .header::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 50%;
-    transform: translateX(-50%);
-    width: 160px; height: 2px;
-    background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  }
-  .header::after {
-    content: '';
-    position: absolute;
-    bottom: 0; left: 50%;
-    transform: translateX(-50%);
-    width: 280px; height: 1px;
-    background: linear-gradient(90deg, transparent, var(--border), transparent);
-  }
-  .header .club-crest {
-    margin-bottom: 12px;
-    filter: drop-shadow(0 0 20px rgba(232,183,49,0.25));
-    animation: logoFloat 6s ease-in-out infinite;
-  }
-  @keyframes logoFloat {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-4px); }
-  }
-  .header .club-name {
-    font-family: 'Cinzel Decorative', serif;
-    font-weight: 900; font-size: 2.2rem;
-    letter-spacing: 4px;
-    text-transform: uppercase;
-    line-height: 1.1;
-    background: linear-gradient(170deg, #fce38a 0%, #e8b731 25%, #d4a017 50%, #e8b731 75%, #fce38a 100%);
-    background-size: 200% 200%;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: goldShimmer 4s ease-in-out infinite;
-    text-shadow: none;
-  }
-  @keyframes goldShimmer {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-  }
-  .header .club-name .word-poker {
-    display: block;
-    font-size: 3.2rem;
-    letter-spacing: 10px;
-    margin-top: 2px;
-  }
-  .header .subtitle {
-    font-family: 'Cinzel', serif;
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    letter-spacing: 6px;
-    text-transform: uppercase;
-    margin-top: 10px;
-  }
-  .header .suit-divider {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    margin-top: 14px;
-    color: var(--accent);
-    opacity: 0.4;
-    font-size: 0.65rem;
-    letter-spacing: 2px;
-  }
-  .header .suit-divider .line {
-    width: 40px; height: 1px;
-    background: linear-gradient(90deg, transparent, var(--accent));
-  }
-  .header .suit-divider .line:last-child {
-    background: linear-gradient(90deg, var(--accent), transparent);
-  }
-  .header .suit-divider .suits-mini {
-    font-size: 0.8rem; letter-spacing: 4px;
-  }
+/* Sections */
+.section { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:16px; }
+.section-title { font-weight:700; font-size:1rem; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+.section-title .icon { font-size:1.1rem; }
 
-  .section {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 24px; margin-bottom: 20px;
-  }
-  .section-title {
-    font-weight: 700; font-size: 1.05rem; margin-bottom: 16px;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .section-title .icon { font-size: 1.15rem; }
+/* Input row */
+.input-row { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+.input-row input, .input-row select { flex:1; min-width:120px; padding:10px 14px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-size:0.9rem; font-family:inherit; outline:none; transition:border-color 0.2s; }
+.input-row input:focus, .input-row select:focus { border-color:var(--accent); }
+.input-row select { cursor:pointer; }
+.input-row select option { background:var(--bg); }
 
-  .input-row { display: flex; gap: 10px; margin-bottom: 12px; }
-  input[type="text"], input[type="number"] {
-    background: var(--bg); border: 1px solid var(--border); color: var(--text);
-    padding: 10px 14px; border-radius: var(--radius-sm);
-    font-family: inherit; font-size: 0.95rem; outline: none;
-    transition: border-color 0.2s; width: 100%;
-  }
-  input:focus { border-color: var(--accent); }
-  input::placeholder { color: var(--text-muted); }
+/* Buttons */
+.btn { padding:10px 18px; border-radius:var(--radius-sm); border:none; cursor:pointer; font-family:inherit; font-size:0.88rem; font-weight:600; transition:all 0.2s; display:inline-flex; align-items:center; gap:6px; }
+.btn-primary { background:var(--accent); color:#0c0f14; }
+.btn-primary:hover { background:#f5c842; transform:translateY(-1px); }
+.btn-outline { background:transparent; border:1px solid var(--border); color:var(--text-dim); }
+.btn-outline:hover { border-color:var(--text-muted); color:var(--text); }
+.btn-danger { background:var(--red-dim); color:var(--red); border:1px solid rgba(248,113,113,0.2); }
+.btn-danger:hover { background:rgba(248,113,113,0.25); }
+.btn-sm { padding:6px 12px; font-size:0.8rem; }
+.btn:disabled { opacity:0.4; cursor:not-allowed; }
 
-  select {
-    background: var(--bg); border: 1px solid var(--border); color: var(--text);
-    padding: 10px 14px; border-radius: var(--radius-sm);
-    font-family: inherit; font-size: 0.95rem; outline: none;
-    cursor: pointer; width: 100%;
-  }
-  select:focus { border-color: var(--accent); }
+/* Player cards */
+.player-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
+.player-card { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:14px; transition:border-color 0.2s; position:relative; }
+.player-card:hover { border-color:var(--text-muted); }
+.player-name { font-weight:700; font-size:1rem; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+.player-stats { display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:0.85rem; }
+.stat-label { color:var(--text-dim); }
+.stat-value { text-align:right; font-weight:600; }
+.stat-value.negative { color:var(--red); }
+.stat-value.positive { color:var(--green); }
+.player-actions { margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; }
+.delete-player { position:absolute; top:10px; right:10px; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem; opacity:0; transition:opacity 0.2s; }
+.player-card:hover .delete-player { opacity:1; }
+.delete-player:hover { color:var(--red); }
 
-  .btn {
-    padding: 10px 20px; border: none; border-radius: var(--radius-sm);
-    font-family: inherit; font-size: 0.9rem; font-weight: 600;
-    cursor: pointer; transition: all 0.2s; white-space: nowrap;
-  }
-  .btn-primary { background: var(--accent); color: #0c0f14; }
-  .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
-  .btn-primary:disabled { background: var(--text-muted); cursor: not-allowed; transform: none; }
-  .btn-secondary { background: var(--border); color: var(--text); }
-  .btn-secondary:hover { background: #353b4a; }
-  .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.25); }
-  .btn-danger:hover { background: rgba(248,113,113,0.25); }
-  .btn-sm { padding: 6px 14px; font-size: 0.82rem; }
-  .btn-outline { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
-  .btn-outline:hover { background: var(--accent-dim); }
+/* History */
+.history-list { max-height:400px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+.history-item { display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--bg); border-radius:var(--radius-sm); font-size:0.85rem; border:1px solid transparent; }
+.history-item:hover { border-color:var(--border); }
+.h-time { color:var(--text-muted); font-size:0.78rem; min-width:100px; }
+.h-name { font-weight:600; min-width:80px; }
+.h-type { padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:600; }
+.h-type.borrow { background:var(--red-dim); color:var(--red); }
+.h-type.return { background:var(--green-dim); color:var(--green); }
+.h-amount { margin-left:auto; font-weight:700; font-size:0.9rem; }
+.h-amount.negative { color:var(--red); }
+.h-amount.positive { color:var(--green); }
+.delete-btn { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:0.8rem; opacity:0; transition:opacity 0.2s; padding:2px 6px; }
+.history-item:hover .delete-btn { opacity:1; }
+.delete-btn:hover { color:var(--red); }
 
-  .players-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  .players-table th {
-    text-align: left; font-size: 0.78rem; font-weight: 600;
-    color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;
-    padding: 8px 10px; border-bottom: 1px solid var(--border);
-  }
-  .players-table td {
-    padding: 12px 10px; border-bottom: 1px solid rgba(42,48,60,0.5);
-    font-size: 0.92rem; vertical-align: middle;
-  }
-  .players-table tr:last-child td { border-bottom: none; }
-  .players-table tr:hover td { background: rgba(255,255,255,0.02); }
+/* Settlement */
+.settlement-grid { display:grid; gap:8px; }
+.settle-row { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:var(--bg); border-radius:var(--radius-sm); border-left:3px solid var(--border); }
+.settle-row.owes { border-left-color:var(--red); }
+.settle-row.clear { border-left-color:var(--green); }
+.settle-row.overpaid { border-left-color:var(--accent); }
+.settle-name { font-weight:600; }
+.settle-amount { font-weight:700; font-size:1.05rem; }
+.settle-amount.negative { color:var(--red); }
+.settle-amount.positive { color:var(--green); }
+.settle-amount.zero { color:var(--text-muted); }
 
-  .player-name { font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .player-avatar {
-    width: 30px; height: 30px; border-radius: 50%;
-    background: var(--accent-dim); color: var(--accent);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 0.75rem; font-weight: 700; flex-shrink: 0;
-  }
+/* Data/Backup */
+.data-actions { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+.file-input-hidden { display:none; }
+.backup-status { padding:10px 14px; border-radius:var(--radius-sm); background:var(--bg); font-size:0.85rem; margin-bottom:12px; }
+.backup-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; background:var(--green); vertical-align:middle; }
+.backup-dot.warning { background:var(--accent); }
+.backup-dot.danger { background:var(--red); }
+.data-info { padding:16px; background:var(--bg); border-radius:var(--radius-sm); font-size:0.85rem; color:var(--text-dim); line-height:1.6; }
+.data-info code { background:var(--surface); padding:2px 6px; border-radius:4px; font-size:0.8rem; }
 
-  .amount-positive { color: var(--green); font-weight: 600; }
-  .amount-negative { color: var(--red); font-weight: 600; }
-  .amount-zero { color: var(--text-dim); }
+/* Admin panel */
+.admin-lock-msg { text-align:center; padding:40px; color:var(--text-dim); }
+.lock-icon { font-size:2.5rem; margin-bottom:12px; }
 
-  .borrow-count {
-    display: inline-flex; align-items: center; gap: 4px;
-    background: var(--accent-dim); color: var(--accent);
-    padding: 2px 8px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
-  }
-  .borrow-count.maxed { background: var(--red-dim); color: var(--red); }
+/* Stats bar */
+.stats-bar { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+.stat-card { flex:1; min-width:120px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px; text-align:center; }
+.stat-card .label { font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }
+.stat-card .value { font-size:1.4rem; font-weight:700; }
 
-  .history-list { max-height: 400px; overflow-y: auto; margin-top: 8px; }
-  .history-list::-webkit-scrollbar { width: 6px; }
-  .history-list::-webkit-scrollbar-track { background: transparent; }
-  .history-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+/* PIN Modal */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); z-index:1000; display:none; align-items:center; justify-content:center; }
+.modal-overlay.active { display:flex; }
+.modal { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:28px; max-width:380px; width:90%; text-align:center; }
+.modal h3 { margin-bottom:8px; font-size:1.1rem; }
+.modal p { color:var(--text-dim); font-size:0.88rem; margin-bottom:20px; }
+.pin-row { display:flex; gap:10px; justify-content:center; margin-bottom:16px; }
+.pin-digit { width:50px; height:56px; text-align:center; font-size:1.5rem; font-weight:700; background:var(--bg); border:2px solid var(--border); border-radius:var(--radius-sm); color:var(--accent); outline:none; font-family:inherit; transition:border-color 0.2s; }
+.pin-digit:focus { border-color:var(--accent); }
+.pin-error { color:var(--red); font-size:0.85rem; min-height:20px; margin-bottom:12px; }
+.modal-actions { display:flex; gap:8px; justify-content:center; }
+.pin-reset-link { font-size:0.8rem; color:var(--text-muted); cursor:pointer; margin-top:10px; }
+.pin-reset-link:hover { color:var(--accent); }
 
-  .history-item {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 12px; border-radius: var(--radius-sm);
-    margin-bottom: 4px; font-size: 0.88rem; transition: background 0.15s;
-  }
-  .history-item:hover { background: rgba(255,255,255,0.03); }
-  .history-item .time { color: var(--text-muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; min-width: 130px; }
-  .history-item .detail { flex: 1; margin: 0 12px; }
-  .history-item .h-amount { font-weight: 600; white-space: nowrap; }
-  .history-item.borrow .h-amount { color: var(--red); }
-  .history-item.return .h-amount { color: var(--green); }
-  .history-item .delete-btn {
-    background: none; border: none; color: var(--text-muted);
-    cursor: pointer; padding: 4px; font-size: 0.9rem; opacity: 0; transition: opacity 0.15s;
-  }
-  .history-item:hover .delete-btn { opacity: 1; }
-  .history-item .delete-btn:hover { color: var(--red); }
+/* Toast */
+.toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%) translateY(100px); background:var(--card); border:1px solid var(--border); color:var(--text); padding:12px 24px; border-radius:var(--radius); font-size:0.9rem; font-weight:500; z-index:2000; transition:transform 0.3s ease; box-shadow:0 8px 30px rgba(0,0,0,0.4); }
+.toast.show { transform:translateX(-50%) translateY(0); }
 
-  .settlement-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px; margin-top: 8px;
-  }
-  .settlement-card { padding: 16px; border-radius: var(--radius-sm); border: 1px solid; }
-  .settlement-card.owes { background: var(--red-dim); border-color: rgba(248,113,113,0.2); }
-  .settlement-card.settled { background: var(--green-dim); border-color: rgba(52,211,153,0.2); }
-  .settlement-card.surplus { background: var(--accent-dim); border-color: rgba(232,183,49,0.2); }
-  .settlement-card .s-name { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
-  .settlement-card .s-amount { font-size: 1.3rem; font-weight: 700; }
-  .settlement-card.owes .s-amount { color: var(--red); }
-  .settlement-card.settled .s-amount { color: var(--green); }
-  .settlement-card.surplus .s-amount { color: var(--accent); }
-  .settlement-card .s-label { font-size: 0.78rem; color: var(--text-dim); margin-top: 2px; }
+/* Footer */
+.footer { text-align:center; padding:24px 0; border-top:1px solid var(--border); margin-top:20px; }
+.footer p { color:var(--text-muted); font-size:0.8rem; margin-bottom:10px; }
+.clear-all { background:none; border:1px solid rgba(248,113,113,0.2); color:var(--red); padding:8px 16px; border-radius:var(--radius-sm); cursor:pointer; font-size:0.82rem; font-family:inherit; transition:all 0.2s; }
+.clear-all:hover { background:var(--red-dim); }
 
-  .tabs {
-    display: flex; gap: 4px; margin-bottom: 16px;
-    background: var(--bg); padding: 4px; border-radius: var(--radius-sm); overflow-x: auto;
-  }
-  .tab {
-    flex: 1; padding: 10px; text-align: center;
-    font-size: 0.88rem; font-weight: 600; border: none; background: transparent;
-    color: var(--text-dim); cursor: pointer; border-radius: 6px;
-    transition: all 0.2s; white-space: nowrap; min-width: fit-content;
-  }
-  .tab.active { background: var(--surface); color: var(--accent); }
-  .tab:hover:not(.active) { color: var(--text); }
+/* Empty state */
+.empty { text-align:center; padding:40px 20px; color:var(--text-dim); }
+.empty .icon { font-size:2.5rem; margin-bottom:10px; opacity:0.4; }
 
-  .stats-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
-  .stat-item {
-    flex: 1; min-width: 140px; background: var(--surface);
-    border: 1px solid var(--border); border-radius: var(--radius-sm);
-    padding: 16px; text-align: center;
-  }
-  .stat-value { font-size: 1.5rem; font-weight: 700; font-family: 'Cinzel', serif; }
-  .stat-label { font-size: 0.78rem; color: var(--text-dim); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+/* Scrollbar */
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--text-muted); }
 
-  .data-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
-  .data-info {
-    font-size: 0.85rem; color: var(--text-dim); margin-top: 16px; padding: 14px;
-    background: var(--bg); border-radius: var(--radius-sm); border: 1px solid var(--border);
-    line-height: 1.6;
-  }
-  .data-info code {
-    background: rgba(232,183,49,0.1); color: var(--accent);
-    padding: 2px 6px; border-radius: 4px; font-size: 0.82rem;
-  }
-  .backup-status { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; margin-top: 12px; }
-  .backup-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
-  .backup-dot.warning { background: var(--accent); }
-  .backup-dot.danger { background: var(--red); }
-
-  .file-input-hidden { display: none; }
-
-  .footer { text-align: center; padding: 24px 0; color: var(--text-muted); font-size: 0.8rem; }
-  .footer .clear-all {
-    color: var(--red); background: none; border: 1px solid rgba(248,113,113,0.25);
-    padding: 6px 16px; border-radius: var(--radius-sm); font-family: inherit;
-    font-size: 0.8rem; cursor: pointer; margin-top: 8px; transition: all 0.2s;
-  }
-  .footer .clear-all:hover { background: var(--red-dim); }
-
-  .empty-state { text-align: center; color: var(--text-muted); padding: 32px 16px; font-size: 0.92rem; }
-  .empty-state .big-icon { font-size: 2rem; margin-bottom: 8px; }
-
-  .toast {
-    position: fixed; bottom: 24px; left: 50%;
-    transform: translateX(-50%) translateY(80px);
-    background: var(--card); border: 1px solid var(--border); color: var(--text);
-    padding: 12px 24px; border-radius: var(--radius); font-size: 0.9rem; font-weight: 500;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4); z-index: 1000; opacity: 0;
-    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1); pointer-events: none;
-  }
-  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-  .modal-overlay {
-    display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,0.6); z-index: 999;
-    align-items: center; justify-content: center; backdrop-filter: blur(4px);
-  }
-  .modal-overlay.active { display: flex; }
-  .modal {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 28px; max-width: 460px; width: 90%;
-    box-shadow: 0 16px 48px rgba(0,0,0,0.5);
-  }
-  .modal h3 { font-size: 1.1rem; margin-bottom: 12px; }
-  .modal p { font-size: 0.9rem; color: var(--text-dim); margin-bottom: 16px; line-height: 1.5; }
-  .modal .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
-
-  /* Transfer items */
-  .transfer-item {
-    display: flex; align-items: center; gap: 12px;
-    padding: 14px 16px; border-radius: var(--radius-sm);
-    background: var(--bg); border: 1px solid var(--border);
-    margin-bottom: 8px; transition: background 0.15s;
-  }
-  .transfer-item:hover { background: var(--surface-hover); }
-  .transfer-item .t-number {
-    width: 28px; height: 28px; border-radius: 50%;
-    background: var(--accent-dim); color: var(--accent);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 0.78rem; font-weight: 700; flex-shrink: 0;
-  }
-  .transfer-item .t-from { font-weight: 700; color: var(--red); }
-  .transfer-item .t-arrow { color: var(--text-muted); font-size: 1.1rem; }
-  .transfer-item .t-to { font-weight: 700; color: var(--green); }
-  .transfer-item .t-amount {
-    margin-left: auto; font-weight: 700; font-size: 1.05rem;
-    color: var(--accent); white-space: nowrap;
-  }
-  .all-settled-banner {
-    text-align: center; padding: 20px;
-    background: var(--green-dim); border: 1px solid rgba(52,211,153,0.2);
-    border-radius: var(--radius-sm); margin-top: 8px;
-  }
-  .all-settled-banner .big-check { font-size: 2rem; margin-bottom: 6px; }
-  .all-settled-banner .settled-text { font-weight: 700; color: var(--green); font-size: 1.05rem; }
-
-  /* Identity selector */
-  .identity-overlay {
-    position: fixed; inset: 0;
-    background: rgba(12,15,20,0.92); z-index: 1000;
-    display: flex; align-items: center; justify-content: center;
-    backdrop-filter: blur(8px);
-  }
-  .identity-overlay.hidden { display: none; }
-  .identity-box {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 36px; max-width: 420px; width: 90%;
-    box-shadow: 0 16px 48px rgba(0,0,0,0.5); text-align: center;
-  }
-  .identity-box .id-crest { font-size: 2.4rem; margin-bottom: 10px; filter: drop-shadow(0 0 12px rgba(232,183,49,0.3)); }
-  .identity-box h2 {
-    font-family: 'Playfair Display', serif; font-weight: 900;
-    color: var(--accent); font-size: 1.5rem; margin-bottom: 4px;
-    letter-spacing: 1px; text-transform: uppercase;
-  }
-  .identity-box .id-sub {
-    font-family: 'Cormorant Garamond', serif; font-size: 0.9rem;
-    color: var(--text-dim); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 20px;
-  }
-  .identity-box p { color: var(--text-dim); font-size: 0.92rem; margin-bottom: 16px; }
-  .identity-box select {
-    width: 100%; margin-bottom: 12px;
-    background: var(--bg); border: 1px solid var(--border); color: var(--text);
-    padding: 12px 14px; border-radius: var(--radius-sm);
-    font-family: inherit; font-size: 1rem; outline: none; cursor: pointer;
-  }
-  .identity-box .btn { width: 100%; padding: 12px; font-size: 1rem; }
-  .identity-box .id-guest {
-    margin-top: 12px; font-size: 0.82rem; color: var(--text-muted);
-    cursor: pointer; transition: color 0.2s;
-  }
-  .identity-box .id-guest:hover { color: var(--text-dim); }
-  .identity-bar {
-    display: flex; align-items: center; justify-content: space-between;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 10px 16px; margin-bottom: 16px;
-  }
-  .identity-bar .ib-name {
-    font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 8px;
-  }
-  .identity-bar .ib-change {
-    font-size: 0.82rem; color: var(--text-muted); cursor: pointer;
-    background: none; border: 1px solid var(--border); padding: 4px 12px;
-    border-radius: var(--radius-sm); font-family: inherit; transition: all 0.2s;
-  }
-  .identity-bar .ib-change:hover { color: var(--text); border-color: var(--text-muted); }
-
-  /* Avatar picker */
-  .avatar-picker {
-    display: grid; grid-template-columns: repeat(8, 1fr);
-    gap: 6px; margin: 12px 0;
-  }
-  .avatar-option {
-    width: 100%; aspect-ratio: 1; border-radius: var(--radius-sm);
-    background: var(--bg); border: 2px solid var(--border);
-    font-size: 1.4rem; cursor: pointer; transition: all 0.15s;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .avatar-option:hover { border-color: var(--accent); transform: scale(1.1); }
-  .avatar-option.selected { border-color: var(--accent); background: var(--accent-dim); box-shadow: 0 0 12px rgba(232,183,49,0.3); }
-  .avatar-section-label {
-    font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;
-    letter-spacing: 1px; margin: 10px 0 4px; font-weight: 600;
-  }
-  .player-icon-display { font-size: 1.3rem; line-height: 1; }
-  .identity-avatar-preview {
-    font-size: 2.5rem; margin: 8px 0;
-    filter: drop-shadow(0 0 8px rgba(232,183,49,0.2));
-  }
-
-  /* Personal stat highlight */
-  .stat-item.personal {
-    border-color: var(--accent);
-    background: linear-gradient(135deg, var(--surface) 0%, rgba(232,183,49,0.08) 100%);
-  }
-
-  /* Admin styles */
-  .admin-badge {
-    display: inline-flex; align-items: center; gap: 5px;
-    font-size: 0.78rem; font-weight: 600;
-    color: #f59e0b; background: rgba(245,158,11,0.12);
-    padding: 3px 10px; border-radius: 20px;
-    border: 1px solid rgba(245,158,11,0.25);
-  }
-  .admin-locked {
-    opacity: 0.4; pointer-events: none; position: relative;
-  }
-  .admin-lock-msg {
-    font-size: 0.82rem; color: var(--text-muted);
-    text-align: center; padding: 16px;
-    background: var(--bg); border-radius: var(--radius-sm);
-    border: 1px dashed var(--border); margin-top: 8px;
-  }
-  .admin-lock-msg .lock-icon { font-size: 1.2rem; margin-bottom: 4px; }
-  .pin-input-group {
-    display: flex; gap: 8px; justify-content: center; margin: 16px 0;
-  }
-  .pin-input-group input {
-    width: 48px; height: 56px; text-align: center;
-    font-size: 1.4rem; font-weight: 700; font-family: 'Cinzel', serif;
-    background: var(--bg); border: 2px solid var(--border);
-    color: var(--accent); border-radius: var(--radius-sm);
-    outline: none; transition: border-color 0.2s;
-    -webkit-text-security: disc;
-  }
-  .pin-input-group input:focus { border-color: var(--accent); }
-  .admin-toggle {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 14px; border-radius: var(--radius-sm);
-    background: none; border: 1px solid var(--border);
-    color: var(--text-dim); font-family: inherit; font-size: 0.82rem;
-    cursor: pointer; transition: all 0.2s;
-  }
-  .admin-toggle:hover { border-color: var(--text-muted); color: var(--text); }
-  .admin-toggle.active {
-    border-color: #f59e0b; color: #f59e0b;
-    background: rgba(245,158,11,0.08);
-  }
-
-  @media (max-width: 640px) {
-    .header .club-name { font-size: 1.5rem; }
-    .header .club-name .word-poker { font-size: 2.2rem; letter-spacing: 6px; }
-    .section { padding: 16px; }
-    .players-table { font-size: 0.85rem; }
-    .players-table th, .players-table td { padding: 8px 6px; }
-    .stats-bar { gap: 8px; }
-    .stat-item { min-width: 100px; padding: 12px; }
-    .stat-value { font-size: 1.2rem; }
-    .settlement-grid { grid-template-columns: 1fr; }
-    .data-actions { flex-direction: column; }
-    .data-actions .btn { width: 100%; text-align: center; }
-    .history-item { flex-wrap: wrap; gap: 4px; }
-    .history-item .time { min-width: auto; }
-  }
+/* Responsive */
+@media(max-width:600px) {
+  .header h1 { font-size:1.5rem; }
+  .player-grid { grid-template-columns:1fr; }
+  .stats-bar { flex-direction:column; }
+  .tabs { gap:2px; }
+  .tab { padding:8px 4px; font-size:0.78rem; }
+  .input-row { flex-direction:column; }
+  .input-row input, .input-row select { min-width:100%; }
+}
 </style>
 </head>
 <body>
 
 <div class="app">
+  <!-- Connection Status -->
+  <div class="conn-status loading" id="connStatus">🔄 Connecting to cloud database...</div>
+
+  <!-- Header -->
   <div class="header">
-    <div class="club-crest">
-      <svg width="110" height="110" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="goldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" style="stop-color:#fce38a"/>
-            <stop offset="30%" style="stop-color:#e8b731"/>
-            <stop offset="60%" style="stop-color:#d4a017"/>
-            <stop offset="100%" style="stop-color:#b8860b"/>
-          </linearGradient>
-          <linearGradient id="goldGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#fce38a"/>
-            <stop offset="50%" style="stop-color:#d4a017"/>
-            <stop offset="100%" style="stop-color:#fce38a"/>
-          </linearGradient>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="3" result="blur"/>
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-          <filter id="innerGlow">
-            <feGaussianBlur stdDeviation="1.5" result="blur"/>
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-        </defs>
-        <!-- Outer shield -->
-        <path d="M100 8 L185 50 L185 120 Q185 170 100 195 Q15 170 15 120 L15 50 Z" fill="none" stroke="url(#goldGrad)" stroke-width="3" filter="url(#glow)"/>
-        <path d="M100 18 L175 55 L175 118 Q175 162 100 185 Q25 162 25 118 L25 55 Z" fill="none" stroke="url(#goldGrad)" stroke-width="1" opacity="0.4"/>
-        <!-- Inner dark fill -->
-        <path d="M100 22 L172 57 L172 117 Q172 159 100 181 Q28 159 28 117 L28 57 Z" fill="#0c0f14" opacity="0.85"/>
-        <!-- Center spade - large -->
-        <path d="M100 45 C100 45, 62 82, 62 102 C62 116, 74 124, 86 119 C91 117, 96 115, 100 120 C104 115, 109 117, 114 119 C126 124, 138 116, 138 102 C138 82, 100 45, 100 45Z" fill="url(#goldGrad)" filter="url(#innerGlow)"/>
-        <path d="M94 117 L94 140 Q94 146 100 146 Q106 146 106 140 L106 117" fill="url(#goldGrad)"/>
-        <!-- Small suits around the spade -->
-        <text x="52" y="68" font-size="14" fill="#d4a017" opacity="0.6" text-anchor="middle">♣</text>
-        <text x="148" y="68" font-size="14" fill="#d4a017" opacity="0.6" text-anchor="middle">♦</text>
-        <text x="52" y="155" font-size="14" fill="#d4a017" opacity="0.6" text-anchor="middle">♥</text>
-        <text x="148" y="155" font-size="14" fill="#d4a017" opacity="0.6" text-anchor="middle">♠</text>
-        <!-- Top banner: A P C -->
-        <text x="100" y="168" font-family="Cinzel, serif" font-weight="700" font-size="16" fill="url(#goldGrad2)" text-anchor="middle" letter-spacing="8">A P C</text>
-        <!-- Corner decorations -->
-        <circle cx="100" cy="34" r="2" fill="#d4a017" opacity="0.5"/>
-        <line x1="70" y1="36" x2="84" y2="36" stroke="#d4a017" stroke-width="0.8" opacity="0.3"/>
-        <line x1="116" y1="36" x2="130" y2="36" stroke="#d4a017" stroke-width="0.8" opacity="0.3"/>
-      </svg>
-    </div>
-    <div class="club-name">
-      Almere
-      <span class="word-poker">Poker</span>
-      Club
-    </div>
+    <svg width="70" height="70" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="gG" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#f5d96b"/><stop offset="50%" stop-color="#d4a017"/><stop offset="100%" stop-color="#e8b731"/></linearGradient>
+        <filter id="gw"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <circle cx="50" cy="50" r="46" fill="none" stroke="url(#gG)" stroke-width="2.5" filter="url(#gw)"/>
+      <circle cx="50" cy="50" r="40" fill="none" stroke="url(#gG)" stroke-width="0.5" opacity="0.5"/>
+      <path d="M50 20 C50 20,28 42,28 55 C28 63,35 68,42 65 C45 63.5,48 62,50 65 C52 62,55 63.5,58 65 C65 68,72 63,72 55 C72 42,50 20,50 20Z" fill="url(#gG)" filter="url(#gw)"/>
+      <rect x="47" y="62" width="6" height="12" rx="1" fill="url(#gG)"/>
+      <text x="18" y="30" font-size="7" fill="#d4a017" opacity="0.7">✦</text>
+      <text x="76" y="30" font-size="7" fill="#d4a017" opacity="0.7">✦</text>
+      <text x="18" y="78" font-size="7" fill="#d4a017" opacity="0.7">✦</text>
+      <text x="76" y="78" font-size="7" fill="#d4a017" opacity="0.7">✦</text>
+    </svg>
+    <h1>ALMERE POKER CLUB</h1>
     <div class="subtitle">Est. 2025 · Netherlands</div>
-    <div class="suit-divider">
-      <span class="line"></span>
-      <span class="suits-mini">♠ ♥ ♦ ♣</span>
-      <span class="line"></span>
-    </div>
+    <div class="suit-divider"><span class="line"></span><span class="suits-mini">♠ ♥ ♦ ♣</span><span class="line"></span></div>
   </div>
 
-  <!-- Identity Selector -->
-  <div class="identity-overlay" id="identityOverlay">
-    <div class="identity-box">
-      <div class="id-crest" style="font-size:2rem;filter:drop-shadow(0 0 8px rgba(232,183,49,0.2))">♠</div>
-      <h2 style="font-family:'Cinzel Decorative',serif;letter-spacing:3px">Almere Poker Club</h2>
-      <div class="id-sub">Welcome</div>
-      <p>Who's at the table?</p>
-      <select id="identitySelect"><option value="">Select your name...</option></select>
-      <button class="btn btn-primary" onclick="confirmIdentity()">Enter</button>
-      <div class="id-guest" onclick="skipIdentity()">Continue as guest</div>
-    </div>
-  </div>
-
-  <!-- Identity Bar -->
-  <div class="identity-bar" id="identityBar" style="display:none">
-    <div class="ib-name"><span>♠</span> Logged in as: <strong id="identityName"></strong> <span id="adminBadge" class="admin-badge" style="display:none">🔑 Admin</span></div>
-    <div style="display:flex;gap:8px;align-items:center">
+  <!-- Identity bar -->
+  <div class="identity-bar">
+    <div class="identity-left">
       <button class="admin-toggle" id="adminToggle" onclick="toggleAdmin()">🔒 Admin</button>
-      <button class="ib-change" onclick="changeIdentity()">Switch Player</button>
+      <span class="admin-badge" id="adminBadge"></span>
     </div>
+    <span style="font-size:0.8rem;color:var(--text-muted)" id="syncIndicator">☁️ Cloud synced</span>
   </div>
 
+  <!-- Stats -->
   <div class="stats-bar">
-    <div class="stat-item"><div class="stat-value" id="statPlayers">0</div><div class="stat-label">Players</div></div>
-    <div class="stat-item"><div class="stat-value" id="statBorrowed">€0</div><div class="stat-label">Total Borrowed</div></div>
-    <div class="stat-item"><div class="stat-value" id="statReturned">€0</div><div class="stat-label">Total Returned</div></div>
-    <div class="stat-item"><div class="stat-value" id="statOutstanding">€0</div><div class="stat-label">Outstanding</div></div>
-    <div class="stat-item personal" id="statPersonalWrap" style="display:none">
-      <div class="stat-value" id="statPersonal">€0</div>
-      <div class="stat-label" id="statPersonalLabel">Your Outstanding</div>
-    </div>
+    <div class="stat-card"><div class="label">Players</div><div class="value" id="statPlayers">0</div></div>
+    <div class="stat-card"><div class="label">Total Borrowed</div><div class="value" id="statBorrowed">€0</div></div>
+    <div class="stat-card"><div class="label">Total Returned</div><div class="value" id="statReturned">€0</div></div>
+    <div class="stat-card"><div class="label">Outstanding</div><div class="value" id="statOutstanding">€0</div></div>
   </div>
 
+  <!-- Tabs -->
   <div class="tabs">
-    <button class="tab active" onclick="switchTab('players')">Players</button>
-    <button class="tab" onclick="switchTab('actions')">Borrow / Return</button>
-    <button class="tab" onclick="switchTab('history')">History</button>
-    <button class="tab" onclick="switchTab('settlement')">Settlement</button>
-    <button class="tab" onclick="switchTab('data')">Backup</button>
-    <button class="tab" id="adminTabBtn" onclick="switchTab('admin')" style="display:none">👑 Admin</button>
+    <div class="tab active" onclick="switchTab('players')">👥 Players</div>
+    <div class="tab" onclick="switchTab('actions')">💰 Actions</div>
+    <div class="tab" onclick="switchTab('history')">📜 History</div>
+    <div class="tab" onclick="switchTab('settlement')">⚖️ Settlement</div>
+    <div class="tab" onclick="switchTab('data')">💾 Backup</div>
+    <div class="tab" id="adminTabBtn" style="display:none" onclick="switchTab('admin')">👑 Admin</div>
   </div>
 
-  <!-- Players -->
-  <div id="tab-players" class="section">
-    <div class="section-title"><span class="icon">👥</span> Players</div>
-    <div class="input-row">
-      <input type="text" id="playerName" placeholder="Enter player name..." maxlength="20" onkeydown="if(event.key==='Enter') addPlayer()">
-      <button class="btn btn-secondary" onclick="openNewPlayerIconPicker()" id="newPlayerIconBtn" title="Pick icon">🎨 <span id="newPlayerIconPreview"></span></button>
-      <button class="btn btn-primary" onclick="addPlayer()">Add Player</button>
-    </div>
-    <div id="playerCount" style="font-size:0.82rem;color:var(--text-dim);margin-bottom:12px"></div>
-    <div id="playersTableWrap"></div>
-  </div>
-
-  <!-- Actions -->
-  <div id="tab-actions" class="section" style="display:none">
-    <div class="section-title"><span class="icon">💰</span> Borrow / Return</div>
-    <div class="input-row">
-      <select id="actionPlayer"><option value="">Select player...</option></select>
-      <select id="actionType"><option value="borrow">Borrow</option><option value="return">Return</option></select>
-    </div>
-    <div class="input-row">
-      <input type="number" id="actionAmount" placeholder="Amount (€)" min="1" onkeydown="if(event.key==='Enter') recordAction()">
-      <button class="btn btn-primary" onclick="recordAction()">Record</button>
-    </div>
-    <div id="actionMsg" style="font-size:0.85rem;margin-top:8px;min-height:20px"></div>
-  </div>
-
-  <!-- History -->
-  <div id="tab-history" class="section" style="display:none">
-    <div class="section-title"><span class="icon">📋</span> Transaction History</div>
-    <div style="margin-bottom:12px">
-      <select id="historyFilter" onchange="renderHistory()" style="max-width:200px"><option value="all">All Players</option></select>
-    </div>
-    <div class="history-list" id="historyList"></div>
-  </div>
-
-  <!-- Settlement -->
-  <div id="tab-settlement" class="section" style="display:none">
-    <div class="section-title"><span class="icon">🏦</span> Settlement</div>
-    <div id="settlementGrid" class="settlement-grid"></div>
-    <div id="transfersSection" style="display:none; margin-top: 24px;">
-      <div class="section-title" style="border-top: 1px solid var(--border); padding-top: 20px;">
-        <span class="icon">🤝</span> Who Pays Whom
+  <!-- Tab: Players -->
+  <div id="tab-players">
+    <div class="section">
+      <div class="section-title"><span class="icon">👥</span> Players</div>
+      <div class="input-row">
+        <input type="text" id="newPlayerName" placeholder="Player name..." maxlength="20" onkeydown="if(event.key==='Enter')addPlayer()">
+        <button class="btn btn-primary" onclick="addPlayer()">+ Add Player</button>
       </div>
-      <p style="font-size: 0.85rem; color: var(--text-dim); margin-bottom: 14px;">Minimum transactions to settle all debts:</p>
-      <div id="transfersList"></div>
+      <div class="player-grid" id="playerGrid"></div>
     </div>
   </div>
 
-  <!-- Backup -->
-  <div id="tab-data" class="section" style="display:none">
-    <div class="section-title"><span class="icon">💾</span> Backup & Restore</div>
-    <p style="font-size:0.9rem;color:var(--text-dim);margin-bottom:16px">
-      Export your data as a JSON file to keep a backup, or import a previous backup to restore your history.
-    </p>
-    <div class="data-actions">
-      <button class="btn btn-primary" onclick="exportData()">📤 Export Data</button>
-      <button class="btn btn-outline" onclick="if(requireAdmin()) document.getElementById('importFile').click()">📥 Import Backup</button>
-      <input type="file" id="importFile" class="file-input-hidden" accept=".json" onchange="importData(event)">
+  <!-- Tab: Actions -->
+  <div id="tab-actions" style="display:none">
+    <div class="section">
+      <div class="section-title"><span class="icon">💸</span> Record Borrow</div>
+      <div class="input-row">
+        <select id="borrowPlayer"><option value="">Select player...</option></select>
+        <input type="number" id="borrowAmount" placeholder="Amount (€)" min="1" step="1" onkeydown="if(event.key==='Enter')recordBorrow()">
+        <button class="btn btn-danger" onclick="recordBorrow()">- Borrow</button>
+      </div>
+      <div id="borrowInfo" style="font-size:0.82rem;color:var(--text-dim);margin-top:4px"></div>
     </div>
-    <div id="backupStatus" class="backup-status"></div>
-    <div class="data-info">
-      <strong>How it works:</strong><br><br>
-      <strong>Export</strong> downloads a <code>.json</code> file with all your players and transactions. Save it to Google Drive or OneDrive for safe keeping.<br><br>
-      <strong>Import</strong> restores data from a previously exported file. Data is <em>merged</em> with current data (no duplicates).<br><br>
-      <strong>Tip:</strong> Export after every poker session. This way even if you switch browsers or clear cache, your history is safe.
+    <div class="section">
+      <div class="section-title"><span class="icon">💰</span> Record Return</div>
+      <div class="input-row">
+        <select id="returnPlayer"><option value="">Select player...</option></select>
+        <input type="number" id="returnAmount" placeholder="Amount (€)" min="1" step="1" onkeydown="if(event.key==='Enter')recordReturn()">
+        <button class="btn btn-primary" onclick="recordReturn()" style="background:var(--green);color:#0c0f14">+ Return</button>
+      </div>
     </div>
   </div>
 
-  <!-- Admin Panel (Owner only) -->
-  <div id="tab-admin" class="section" style="display:none">
-    <div class="section-title"><span class="icon">👑</span> Owner Panel</div>
-    <div id="adminPanelContent"></div>
+  <!-- Tab: History -->
+  <div id="tab-history" style="display:none">
+    <div class="section">
+      <div class="section-title"><span class="icon">📜</span> Transaction History</div>
+      <div class="history-list" id="historyList"></div>
+    </div>
   </div>
 
+  <!-- Tab: Settlement -->
+  <div id="tab-settlement" style="display:none">
+    <div class="section">
+      <div class="section-title"><span class="icon">⚖️</span> Settlement Summary</div>
+      <div class="settlement-grid" id="settlementGrid"></div>
+    </div>
+  </div>
+
+  <!-- Tab: Backup -->
+  <div id="tab-data" style="display:none">
+    <div class="section">
+      <div class="section-title"><span class="icon">💾</span> Backup & Restore</div>
+      <p style="color:var(--text-dim);font-size:0.88rem;margin-bottom:14px">Your data is stored in the cloud (Firebase). Backups are optional but recommended for extra safety.</p>
+      <div class="data-actions">
+        <button class="btn btn-primary" onclick="exportData()">📤 Export Data</button>
+        <button class="btn btn-outline" onclick="if(requireAdmin()) document.getElementById('importFile').click()">📥 Import Backup</button>
+        <input type="file" id="importFile" class="file-input-hidden" accept=".json" onchange="importData(event)">
+      </div>
+      <div id="backupStatus" class="backup-status"></div>
+      <div class="data-info">
+        <strong>How it works:</strong><br><br>
+        <strong>Cloud sync:</strong> All data is automatically saved to Firebase Firestore. You can access it from any device.<br><br>
+        <strong>Export</strong> downloads a <code>.json</code> backup file. Save it to Google Drive or OneDrive for extra safety.<br><br>
+        <strong>Import</strong> restores data from a previously exported file. Data is <em>merged</em> with existing data (no duplicates).<br><br>
+        <strong>Offline mode:</strong> The app works offline using local storage and syncs to cloud when back online.
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Admin -->
+  <div id="tab-admin" style="display:none">
+    <div class="section">
+      <div class="section-title"><span class="icon">👑</span> Admin Panel</div>
+      <div id="adminPanelContent"></div>
+    </div>
+  </div>
+
+  <!-- Footer -->
   <div class="footer">
-    <p>Data auto-saved to browser · Export backups for long-term safety</p>
-    <button class="clear-all" onclick="clearAllData()">👑 Clear All Data (Owner Only)</button>
+    <p>☁️ Cloud synced via Firebase · Local backup available</p>
+    <button class="clear-all" onclick="clearAllData()">⚠ Clear All Data</button>
   </div>
 </div>
 
-<!-- Import Modal -->
+<!-- PIN Modal -->
+<div class="modal-overlay" id="adminPinModal">
+  <div class="modal">
+    <h3 id="adminPinTitle">🔑 Enter PIN</h3>
+    <p id="adminPinMsg">Enter your 4-digit PIN</p>
+    <div class="pin-row">
+      <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" data-idx="0" autocomplete="off">
+      <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" data-idx="1" autocomplete="off">
+      <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" data-idx="2" autocomplete="off">
+      <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" data-idx="3" autocomplete="off">
+    </div>
+    <div class="pin-error" id="pinError"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="cancelAdminPin()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitPin()">Confirm</button>
+    </div>
+    <div class="pin-reset-link" id="pinResetOption" style="display:none" onclick="resetAdminPin()">Forgot PIN? Reset it</div>
+  </div>
+</div>
+
+<!-- Import modal -->
 <div class="modal-overlay" id="importModal">
   <div class="modal">
     <h3>📥 Import Backup</h3>
-    <div id="importPreview"></div>
+    <div id="importPreview" style="text-align:left;margin:12px 0;font-size:0.88rem"></div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="cancelImport()">Cancel</button>
+      <button class="btn btn-outline" onclick="cancelImport()">Cancel</button>
       <button class="btn btn-primary" onclick="confirmImport()">Import & Merge</button>
-    </div>
-  </div>
-</div>
-
-<!-- Icon Picker Modal -->
-<div class="modal-overlay" id="iconPickerModal">
-  <div class="modal" style="max-width:500px">
-    <h3>🎨 Pick Your Icon</h3>
-    <p>Choose an icon for <strong id="iconPickerName"></strong></p>
-    <div class="identity-avatar-preview" id="iconPickerPreview">?</div>
-    <div class="avatar-section-label">Poker</div>
-    <div class="avatar-picker" id="iconPickerGrid1"></div>
-    <div class="avatar-section-label">Animals</div>
-    <div class="avatar-picker" id="iconPickerGrid2"></div>
-    <div class="avatar-section-label">Characters</div>
-    <div class="avatar-picker" id="iconPickerGrid3"></div>
-    <div class="avatar-section-label">Power</div>
-    <div class="avatar-picker" id="iconPickerGrid4"></div>
-    <div class="modal-actions" style="margin-top:16px">
-      <button class="btn btn-secondary" onclick="cancelIconPicker()">Cancel</button>
-      <button class="btn btn-danger btn-sm" onclick="clearPlayerIcon()" style="margin-right:auto">Remove Icon</button>
-      <button class="btn btn-primary" onclick="confirmIconPicker()">Save</button>
     </div>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
-<!-- Admin Role Select Modal -->
-<div class="modal-overlay" id="adminRoleModal">
-  <div class="modal" style="max-width:380px" id="adminRoleContent"></div>
-</div>
+<!-- Firebase SDK via ESM CDN -->
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
 
-<!-- Admin PIN Modal -->
-<div class="modal-overlay" id="adminPinModal">
-  <div class="modal" style="max-width:380px">
-    <h3 id="adminPinTitle">🔑 Enter Admin PIN</h3>
-    <p id="adminPinMsg">Enter your 4-digit PIN to unlock admin controls.</p>
-    <div class="pin-input-group" id="pinInputGroup">
-      <input type="tel" maxlength="1" class="pin-digit" data-idx="0" oninput="pinDigitInput(this)" onkeydown="pinDigitKeydown(event, this)">
-      <input type="tel" maxlength="1" class="pin-digit" data-idx="1" oninput="pinDigitInput(this)" onkeydown="pinDigitKeydown(event, this)">
-      <input type="tel" maxlength="1" class="pin-digit" data-idx="2" oninput="pinDigitInput(this)" onkeydown="pinDigitKeydown(event, this)">
-      <input type="tel" maxlength="1" class="pin-digit" data-idx="3" oninput="pinDigitInput(this)" onkeydown="pinDigitKeydown(event, this)">
-    </div>
-    <div id="pinError" style="color:var(--red);font-size:0.85rem;text-align:center;min-height:20px;margin-bottom:12px"></div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="cancelAdminPin()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitAdminPin()">Confirm</button>
-    </div>
-    <div id="pinResetOption" style="display:none;margin-top:12px;text-align:center">
-      <span style="font-size:0.82rem;color:var(--text-muted);cursor:pointer;text-decoration:underline" onclick="resetAdminPin()">Forgot PIN? Reset</span>
-    </div>
-  </div>
-</div>
+// ══════════════════════════════════════════════════════════════
+// 🔧 FIREBASE CONFIG — REPLACE WITH YOUR OWN VALUES
+// ══════════════════════════════════════════════════════════════
+  const firebaseConfig = {
+    apiKey: "AIzaSyC1Zw2OGYEgVmT0ocTAEhWEIouWYdLphJ0",
+    authDomain: "almereoostvaarderspoker.firebaseapp.com",
+    projectId: "almereoostvaarderspoker",
+    storageBucket: "almereoostvaarderspoker.firebasestorage.app",
+    messagingSenderId: "1079793019121",
+    appId: "1:1079793019121:web:48c752170b5345860c2150"
+  };
+// ══════════════════════════════════════════════════════════════
 
-<script>
-const STORAGE_KEY = 'poker_tracker_v2';
-const APP_VERSION = '2.0';
+const FIRESTORE_DOC = 'clubs/almere-poker-club';
+let firebaseReady = false;
+let db = null;
+let unsubFirestore = null;
+let suppressRemoteUpdate = false;
 
-function loadData() {
+try {
+  const app = initializeApp(firebaseConfig);
+  db = getFirestore(app);
+  firebaseReady = true;
+  setConnStatus('online', '☁️ Connected to Firebase');
+} catch (e) {
+  console.warn('Firebase init failed, running in offline mode:', e);
+  setConnStatus('offline', '⚠️ Offline mode — using local storage only');
+}
+
+// ─── Connection Status ───
+function setConnStatus(state, msg) {
+  const el = document.getElementById('connStatus');
+  const sync = document.getElementById('syncIndicator');
+  el.className = 'conn-status ' + state;
+  el.textContent = msg;
+  if (state === 'online') {
+    sync.textContent = '☁️ Cloud synced';
+    sync.style.color = 'var(--green)';
+    setTimeout(() => { el.style.display = 'none'; }, 3000);
+  } else if (state === 'offline') {
+    sync.textContent = '📴 Offline';
+    sync.style.color = 'var(--red)';
+  }
+}
+
+// ─── Data Layer ───
+const STORAGE_KEY = 'poker_tracker_v3';
+const APP_VERSION = '3.0';
+
+function defaultData() {
+  return { version: APP_VERSION, createdAt: new Date().toISOString(), players: [], transactions: [] };
+}
+
+function loadLocal() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const p = JSON.parse(raw);
       if (!p.players) p.players = [];
       if (!p.transactions) p.transactions = [];
-      if (!p.version) p.version = APP_VERSION;
-      if (!p.createdAt) p.createdAt = new Date().toISOString();
-      // Migrate old string-format players to objects
-      p.players = p.players.map(pl => typeof pl === 'string' ? { name: pl, addedAt: null } : pl);
       return p;
     }
   } catch(e) {}
-  return { version: APP_VERSION, createdAt: new Date().toISOString(), players: [], transactions: [] };
+  return defaultData();
+}
+
+function saveLocal() {
+  data.lastModified = new Date().toISOString();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+async function saveToCloud() {
+  if (!firebaseReady || !db) return;
+  try {
+    suppressRemoteUpdate = true;
+    await setDoc(doc(db, ...FIRESTORE_DOC.split('/')), {
+      ...data,
+      lastModified: new Date().toISOString(),
+      _updatedBy: 'web-app'
+    });
+    setTimeout(() => { suppressRemoteUpdate = false; }, 2000);
+  } catch(e) {
+    console.warn('Cloud save failed:', e);
+    suppressRemoteUpdate = false;
+  }
 }
 
 function saveData() {
-  data.lastModified = new Date().toISOString();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  saveLocal();
+  saveToCloud();
   updateBackupStatus();
 }
 
-let data = loadData();
+async function loadFromCloud() {
+  if (!firebaseReady || !db) return null;
+  try {
+    const snap = await getDoc(doc(db, ...FIRESTORE_DOC.split('/')));
+    if (snap.exists()) return snap.data();
+  } catch(e) {
+    console.warn('Cloud load failed:', e);
+  }
+  return null;
+}
+
+function listenToCloud() {
+  if (!firebaseReady || !db) return;
+  try {
+    unsubFirestore = onSnapshot(doc(db, ...FIRESTORE_DOC.split('/')), (snap) => {
+      if (suppressRemoteUpdate) return;
+      if (snap.exists()) {
+        const remote = snap.data();
+        if (remote.lastModified && data.lastModified && remote.lastModified > data.lastModified) {
+          data = remote;
+          saveLocal();
+          refreshUI();
+          showToast('☁️ Data synced from cloud');
+        }
+      }
+    });
+  } catch(e) {
+    console.warn('Realtime listener failed:', e);
+  }
+}
+
+let data = loadLocal();
+
+// On startup: load cloud data if newer
+(async () => {
+  const cloud = await loadFromCloud();
+  if (cloud && cloud.lastModified && (!data.lastModified || cloud.lastModified > data.lastModified)) {
+    data = cloud;
+    saveLocal();
+    refreshUI();
+  } else if (data.players.length > 0 && firebaseReady) {
+    // Local has data but cloud doesn't or is older — push to cloud
+    saveToCloud();
+  }
+  listenToCloud();
+  refreshUI();
+})();
+
 let pendingImportData = null;
 
+// ─── Utility ───
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -772,553 +522,230 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2200);
 }
 
+function formatCurrency(n) { return '€' + Number(n).toFixed(2); }
+
+function formatDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + ' ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+}
+
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+// ─── Tabs ───
 const ALL_TABS = ['players','actions','history','settlement','data','admin'];
 function switchTab(tab) {
-  if (tab === 'admin' && !isOwner()) { showToast('👑 Owner access required'); return; }
-  document.querySelectorAll('.tab').forEach((el, i) => el.classList.toggle('active', ALL_TABS[i] === tab));
-  ALL_TABS.forEach(t => { const el = document.getElementById('tab-' + t); if (el) el.style.display = t === tab ? 'block' : 'none'; });
+  document.querySelectorAll('.tab').forEach((el,i) => el.classList.toggle('active', ALL_TABS[i] === tab));
+  ALL_TABS.forEach(t => {
+    const el = document.getElementById('tab-' + t);
+    if (el) el.style.display = t === tab ? '' : 'none';
+  });
+  if (tab === 'actions') populateSelects();
   if (tab === 'history') renderHistory();
   if (tab === 'settlement') renderSettlement();
-  if (tab === 'actions') updateActionDropdown();
-  if (tab === 'data') updateBackupStatus();
   if (tab === 'admin') renderAdminPanel();
 }
 
-function getToday() { return new Date().toISOString().split('T')[0]; }
-
-function getTodayBorrowCount(name) {
-  const today = getToday();
-  return data.transactions.filter(t => t.player === name && t.type === 'borrow' && t.date === today).length;
-}
-
-function getPlayerTotals(name) {
-  let borrowed = 0, returned = 0;
-  data.transactions.forEach(t => {
-    if (t.player === name) { if (t.type === 'borrow') borrowed += t.amount; else returned += t.amount; }
-  });
-  return { borrowed, returned, net: borrowed - returned };
-}
-
-function formatCurrency(n) { return '€' + n.toLocaleString('nl-NL'); }
-
-function formatDateTime(iso) {
-  const d = new Date(iso);
-  return d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' +
-         d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', hour12: true });
-}
-
-function getInitials(name) { return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2); }
-
-// ─── Avatar Icons ───
-const PLAYER_ICONS = {
-  poker: ['🂡','♠','♥','♦','♣','🃏','🎰','🎲'],
-  animals: ['🐺','🦊','🦁','🐯','🦅','🐉','🦈','🐻'],
-  faces: ['😎','🤠','🧐','👑','🥷','🦹','🧙','👨‍🚀'],
-  objects: ['💎','🔥','⚡','🌟','🏆','💰','🎯','🗡️'],
-};
-let selectedIcon = null;
-
-function getPlayerIcon(nameStr) {
-  const p = getPlayerObj(nameStr);
-  return (p && p.icon) ? p.icon : null;
-}
+// ─── Players ───
+function getPlayerNames() { return data.players.map(p => p.name); }
 
 function addPlayer() {
-  const input = document.getElementById('playerName');
+  const input = document.getElementById('newPlayerName');
   const name = input.value.trim();
-  if (!name) return;
-  if (data.players.length >= 15) return showToast('Maximum 15 players!');
-  if (getPlayerNames().find(n => n.toLowerCase() === name.toLowerCase())) return showToast('Player already exists!');
-  data.players.push({ name, addedAt: new Date().toISOString(), icon: selectedIcon || null });
-  saveData(); input.value = ''; selectedIcon = null;
-  updateNewPlayerIconBtn(); renderPlayers(); updateStats();
-  showToast(name + ' joined the table!');
+  if (!name) return showToast('Enter a player name');
+  if (data.players.length >= 15) return showToast('Maximum 15 players');
+  if (data.players.find(p => p.name.toLowerCase() === name.toLowerCase())) return showToast('Player already exists');
+  data.players.push({ name, icon:'🎰', addedAt: new Date().toISOString() });
+  input.value = '';
+  saveData();
+  renderPlayers();
+  updateStats();
+  showToast(`${name} joined the table!`);
 }
-
-function updateNewPlayerIconBtn() {
-  document.getElementById('newPlayerIconPreview').textContent = selectedIcon || '';
-}
-
-// Opens the icon picker modal for a NEW player being added
-function openNewPlayerIconPicker() {
-  iconPickerTarget = '__new__';
-  iconPickerSelected = selectedIcon;
-  document.getElementById('iconPickerName').textContent = 'new player';
-  updateIconPickerPreview();
-  renderIconPickerGrids();
-  document.getElementById('iconPickerModal').classList.add('active');
-}
-
-function getPlayerName(p) { return typeof p === 'string' ? p : p.name; }
-function getPlayerObj(nameStr) { return data.players.find(p => getPlayerName(p) === nameStr); }
-function getPlayerAddedDate(nameStr) {
-  const p = getPlayerObj(nameStr);
-  return (p && p.addedAt) ? formatDateTime(p.addedAt) : 'Unknown';
-}
-function getPlayerNames() { return data.players.map(p => getPlayerName(p)); }
 
 function removePlayer(name) {
   if (!requireAdmin()) return;
-  if (!confirm('Remove ' + name + '? Transaction history will be kept.')) return;
-  data.players = data.players.filter(p => getPlayerName(p) !== name);
-  saveData(); renderPlayers(); updateStats();
+  if (!confirm(`Remove ${name} and all their transactions?`)) return;
+  data.players = data.players.filter(p => p.name !== name);
+  data.transactions = data.transactions.filter(t => t.player !== name);
+  saveData();
+  renderPlayers();
+  updateStats();
   logAdminAction(`Removed player "${name}"`);
-  showToast(name + ' removed');
+  showToast(`${name} removed`);
 }
 
-// ─── Icon Picker Modal ───
-let iconPickerTarget = null;
-let iconPickerSelected = null;
-
-function changePlayerIcon(name) {
-  iconPickerTarget = name;
-  iconPickerSelected = getPlayerIcon(name);
-  document.getElementById('iconPickerName').textContent = name;
-  updateIconPickerPreview();
-  renderIconPickerGrids();
-  document.getElementById('iconPickerModal').classList.add('active');
-}
-
-function renderIconPickerGrids() {
-  const categories = Object.values(PLAYER_ICONS);
-  ['iconPickerGrid1','iconPickerGrid2','iconPickerGrid3','iconPickerGrid4'].forEach((id, i) => {
-    const grid = document.getElementById(id);
-    grid.innerHTML = categories[i].map(icon =>
-      `<div class="avatar-option${iconPickerSelected === icon ? ' selected' : ''}" onclick="pickModalIcon('${icon}')">${icon}</div>`
-    ).join('');
-  });
-}
-
-function pickModalIcon(icon) {
-  iconPickerSelected = (iconPickerSelected === icon) ? null : icon;
-  updateIconPickerPreview();
-  renderIconPickerGrids();
-}
-
-function updateIconPickerPreview() {
-  document.getElementById('iconPickerPreview').textContent = iconPickerSelected || '?';
-}
-
-function confirmIconPicker() {
-  if (!iconPickerTarget) return;
-  if (iconPickerTarget === '__new__') {
-    // Setting icon for a new player (not yet added)
-    selectedIcon = iconPickerSelected;
-    updateNewPlayerIconBtn();
-    cancelIconPicker();
-    return;
-  }
-  const p = getPlayerObj(iconPickerTarget);
-  if (p) { p.icon = iconPickerSelected; saveData(); }
-  renderPlayers(); updateStats();
-  cancelIconPicker();
-  showToast(iconPickerTarget + "'s icon updated!");
-}
-
-function clearPlayerIcon() {
-  iconPickerSelected = null;
-  updateIconPickerPreview();
-  renderIconPickerGrids();
-}
-
-function cancelIconPicker() {
-  iconPickerTarget = null; iconPickerSelected = null;
-  document.getElementById('iconPickerModal').classList.remove('active');
+function getPlayerStats(name) {
+  const txns = data.transactions.filter(t => t.player === name);
+  const today = new Date().toDateString();
+  const todayBorrows = txns.filter(t => t.type === 'borrow' && new Date(t.timestamp).toDateString() === today).length;
+  const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+  const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+  const borrowCount = txns.filter(t => t.type === 'borrow').length;
+  return { totalBorrowed, totalReturned, net: totalBorrowed - totalReturned, borrowCount, todayBorrows };
 }
 
 function renderPlayers() {
-  const wrap = document.getElementById('playersTableWrap');
-  const names = getPlayerNames();
-  document.getElementById('playerCount').textContent = names.length + '/15 players';
-  if (names.length === 0) {
-    wrap.innerHTML = '<div class="empty-state"><div class="big-icon">🃏</div>No players yet. Add someone to get started!</div>';
+  const grid = document.getElementById('playerGrid');
+  if (data.players.length === 0) {
+    grid.innerHTML = '<div class="empty"><div class="icon">🃏</div><p>No players yet. Add players to get started!</p></div>';
     return;
   }
-  let html = '<table class="players-table"><thead><tr><th>Player</th><th>Joined</th><th>Borrowed</th><th>Returned</th><th>Balance</th><th>Today</th><th></th></tr></thead><tbody>';
-  names.forEach(name => {
-    const t = getPlayerTotals(name);
-    const todayCount = getTodayBorrowCount(name);
-    const balClass = t.net > 0 ? 'amount-negative' : t.net < 0 ? 'amount-positive' : 'amount-zero';
-    const balText = t.net > 0 ? 'Owes ' + formatCurrency(t.net) : t.net < 0 ? 'Surplus ' + formatCurrency(-t.net) : 'Settled';
-    const esc = name.replace(/'/g, "\\'");
-    const addedDate = getPlayerAddedDate(name);
-    const icon = getPlayerIcon(name);
-    const avatarHtml = icon
-      ? `<div class="player-avatar" style="background:transparent;font-size:1.3rem;cursor:pointer" onclick="changePlayerIcon('${esc}')" title="Change icon">${icon}</div>`
-      : `<div class="player-avatar" style="cursor:pointer" onclick="changePlayerIcon('${esc}')" title="Change icon">${getInitials(name)}</div>`;
-    html += `<tr>
-      <td><div class="player-name">${avatarHtml}${name}</div></td>
-      <td style="font-size:0.8rem;color:var(--text-dim)">${addedDate}</td>
-      <td>${formatCurrency(t.borrowed)}</td><td>${formatCurrency(t.returned)}</td>
-      <td class="${balClass}">${balText}</td>
-      <td><span class="borrow-count${todayCount >= 10 ? ' maxed' : ''}">${todayCount}/10</span></td>
-      <td>
-        ${isAdminAny() ? `<button class="btn btn-danger btn-sm" onclick="removePlayer('${esc}')">✕</button>` : ''}
-      </td>
-    </tr>`;
+  grid.innerHTML = data.players.map(p => {
+    const s = getPlayerStats(p.name);
+    const isAdm = isAdminAny();
+    return `<div class="player-card">
+      ${isAdm ? `<button class="delete-player" onclick="removePlayer('${p.name.replace(/'/g,"\\'")}')">✕</button>` : ''}
+      <div class="player-name">${p.icon || '🎰'} ${p.name}</div>
+      <div class="player-stats">
+        <span class="stat-label">Borrowed:</span><span class="stat-value">${formatCurrency(s.totalBorrowed)}</span>
+        <span class="stat-label">Returned:</span><span class="stat-value">${formatCurrency(s.totalReturned)}</span>
+        <span class="stat-label">Balance:</span><span class="stat-value ${s.net > 0 ? 'negative' : s.net < 0 ? 'positive' : ''}">${s.net > 0 ? '-' : s.net < 0 ? '+' : ''}${formatCurrency(Math.abs(s.net))}</span>
+        <span class="stat-label">Borrows today:</span><span class="stat-value">${s.todayBorrows}/10</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─── Actions ───
+function populateSelects() {
+  ['borrowPlayer','returnPlayer'].forEach(id => {
+    const sel = document.getElementById(id);
+    const val = sel.value;
+    sel.innerHTML = '<option value="">Select player...</option>' + getPlayerNames().map(n => `<option value="${n}">${n}</option>`).join('');
+    sel.value = val;
   });
-  wrap.innerHTML = html + '</tbody></table>';
+  document.getElementById('borrowPlayer').onchange = function() {
+    const info = document.getElementById('borrowInfo');
+    if (this.value) {
+      const s = getPlayerStats(this.value);
+      info.textContent = `${this.value}: ${s.todayBorrows}/10 borrows today, total borrowed: ${formatCurrency(s.totalBorrowed)}`;
+    } else info.textContent = '';
+  };
 }
 
-function updateActionDropdown() {
-  const sel = document.getElementById('actionPlayer');
-  sel.innerHTML = '<option value="">Select player...</option>';
-  getPlayerNames().forEach(name => sel.innerHTML += `<option value="${name}">${name}</option>`);
+function recordBorrow() {
+  const player = document.getElementById('borrowPlayer').value;
+  const amount = parseFloat(document.getElementById('borrowAmount').value);
+  if (!player) return showToast('Select a player');
+  if (!amount || amount <= 0) return showToast('Enter a valid amount');
+  const s = getPlayerStats(player);
+  if (s.todayBorrows >= 10) return showToast(`${player} has reached 10 borrows today!`);
+  data.transactions.push({ id: genId(), player, type:'borrow', amount, timestamp: new Date().toISOString() });
+  document.getElementById('borrowAmount').value = '';
+  saveData();
+  updateStats();
+  renderPlayers();
+  document.getElementById('borrowPlayer').onchange();
+  showToast(`${player} borrowed ${formatCurrency(amount)}`);
 }
 
-function recordAction() {
-  const player = document.getElementById('actionPlayer').value;
-  const type = document.getElementById('actionType').value;
-  const amtInput = document.getElementById('actionAmount');
-  const amount = parseInt(amtInput.value);
-  const msg = document.getElementById('actionMsg');
-  if (!player) { msg.innerHTML = '<span style="color:var(--red)">Select a player</span>'; return; }
-  if (!amount || amount <= 0) { msg.innerHTML = '<span style="color:var(--red)">Enter a valid amount</span>'; return; }
-  if (type === 'borrow' && getTodayBorrowCount(player) >= 10) {
-    msg.innerHTML = `<span style="color:var(--red)">${player} hit the 10-borrow limit for today!</span>`; return;
-  }
-  data.transactions.push({
-    id: Date.now() + '_' + Math.random().toString(36).slice(2,6),
-    player, type, amount, date: getToday(), timestamp: new Date().toISOString()
-  });
-  saveData(); amtInput.value = '';
-  const action = type === 'borrow' ? 'borrowed' : 'returned';
-  msg.innerHTML = `<span style="color:var(--green)">✓ ${player} ${action} ${formatCurrency(amount)}</span>`;
-  setTimeout(() => msg.innerHTML = '', 3000);
-  renderPlayers(); updateStats();
-  showToast(`${player} ${action} ${formatCurrency(amount)}`);
+function recordReturn() {
+  const player = document.getElementById('returnPlayer').value;
+  const amount = parseFloat(document.getElementById('returnAmount').value);
+  if (!player) return showToast('Select a player');
+  if (!amount || amount <= 0) return showToast('Enter a valid amount');
+  data.transactions.push({ id: genId(), player, type:'return', amount, timestamp: new Date().toISOString() });
+  document.getElementById('returnAmount').value = '';
+  saveData();
+  updateStats();
+  renderPlayers();
+  showToast(`${player} returned ${formatCurrency(amount)}`);
 }
 
+// ─── History ───
 function renderHistory() {
-  const filterSel = document.getElementById('historyFilter');
-  const curVal = filterSel.value;
-  filterSel.innerHTML = '<option value="all">All Players</option>';
-  getPlayerNames().forEach(n => filterSel.innerHTML += `<option value="${n}"${n === curVal ? ' selected' : ''}>${n}</option>`);
-  let txns = [...data.transactions].reverse();
-  if (curVal !== 'all') txns = txns.filter(t => t.player === curVal);
   const list = document.getElementById('historyList');
-  if (txns.length === 0) { list.innerHTML = '<div class="empty-state"><div class="big-icon">📜</div>No transactions yet</div>'; return; }
-  list.innerHTML = txns.map(t => `
-    <div class="history-item ${t.type}">
-      <span class="time">${formatDateTime(t.timestamp)}</span>
-      <span class="detail"><strong>${t.player}</strong> ${t.type === 'borrow' ? 'borrowed' : 'returned'}</span>
-      <span class="h-amount">${t.type === 'borrow' ? '-' : '+'}${formatCurrency(t.amount)}</span>
-      ${isAdminAny() ? `<button class="delete-btn" onclick="deleteTransaction('${t.id}')" title="Delete">✕</button>` : ''}
-    </div>`).join('');
+  const txns = [...data.transactions].reverse();
+  if (txns.length === 0) {
+    list.innerHTML = '<div class="empty"><div class="icon">📜</div><p>No transactions yet.</p></div>';
+    return;
+  }
+  const isAdm = isAdminAny();
+  list.innerHTML = txns.map(t => `<div class="history-item">
+    <span class="h-time">${formatDateTime(t.timestamp)}</span>
+    <span class="h-name">${t.player}</span>
+    <span class="h-type ${t.type}">${t.type}</span>
+    <span class="h-amount ${t.type==='borrow'?'negative':'positive'}">${t.type==='borrow'?'-':'+'}${formatCurrency(t.amount)}</span>
+    ${isAdm ? `<button class="delete-btn" onclick="deleteTransaction('${t.id}')" title="Delete">✕</button>` : ''}
+  </div>`).join('');
 }
 
 function deleteTransaction(id) {
   if (!requireAdmin()) return;
   if (!confirm('Delete this transaction?')) return;
-  const txn = data.transactions.find(t => t.id === id);
-  data.transactions = data.transactions.filter(t => t.id !== id);
-  saveData(); renderHistory(); renderPlayers(); updateStats();
-  if (txn) logAdminAction(`Deleted ${txn.type} of ${formatCurrency(txn.amount)} by "${txn.player}"`);
+  const t = data.transactions.find(x => x.id === id);
+  data.transactions = data.transactions.filter(x => x.id !== id);
+  saveData();
+  renderHistory();
+  renderPlayers();
+  updateStats();
+  if (t) logAdminAction(`Deleted ${t.type} of ${formatCurrency(t.amount)} by ${t.player}`);
   showToast('Transaction deleted');
 }
 
+// ─── Settlement ───
 function renderSettlement() {
   const grid = document.getElementById('settlementGrid');
-  const transfersSection = document.getElementById('transfersSection');
-  const transfersList = document.getElementById('transfersList');
-
-  if (getPlayerNames().length === 0) {
-    grid.innerHTML = '<div class="empty-state"><div class="big-icon">🏦</div>Add players and record transactions to see settlements</div>';
-    transfersSection.style.display = 'none';
+  if (data.players.length === 0) {
+    grid.innerHTML = '<div class="empty"><div class="icon">⚖️</div><p>Add players and record transactions to see settlements.</p></div>';
     return;
   }
-
-  // Render individual balance cards
-  grid.innerHTML = getPlayerNames().map(name => {
-    const t = getPlayerTotals(name);
-    let cls, label, amt;
-    if (t.net > 0) { cls = 'owes'; label = 'Owes the box'; amt = formatCurrency(t.net); }
-    else if (t.net < 0) { cls = 'surplus'; label = 'Box owes them'; amt = formatCurrency(-t.net); }
-    else { cls = 'settled'; label = 'All settled!'; amt = '✓'; }
-    return `<div class="settlement-card ${cls}"><div class="s-name">${name}</div><div class="s-amount">${amt}</div><div class="s-label">${label}</div></div>`;
+  grid.innerHTML = data.players.map(p => {
+    const s = getPlayerStats(p.name);
+    let cls = 'clear', label = 'Settled ✓', amtCls = 'zero';
+    if (s.net > 0) { cls = 'owes'; label = `Owes ${formatCurrency(s.net)}`; amtCls = 'negative'; }
+    else if (s.net < 0) { cls = 'overpaid'; label = `Overpaid ${formatCurrency(Math.abs(s.net))}`; amtCls = 'positive'; }
+    return `<div class="settle-row ${cls}">
+      <span class="settle-name">${p.icon || '🎰'} ${p.name}</span>
+      <span class="settle-amount ${amtCls}">${label}</span>
+    </div>`;
   }).join('');
-
-  // Calculate optimal transfers (who pays whom)
-  const debtors = []; // people who owe (net > 0)
-  const creditors = []; // people owed (net < 0)
-
-  getPlayerNames().forEach(name => {
-    const t = getPlayerTotals(name);
-    if (t.net > 0) debtors.push({ name, amount: t.net });
-    else if (t.net < 0) creditors.push({ name, amount: -t.net });
-  });
-
-  // Sort both by amount descending for efficient matching
-  debtors.sort((a, b) => b.amount - a.amount);
-  creditors.sort((a, b) => b.amount - a.amount);
-
-  const transfers = [];
-  let di = 0, ci = 0;
-
-  while (di < debtors.length && ci < creditors.length) {
-    const debtor = debtors[di];
-    const creditor = creditors[ci];
-    const settleAmount = Math.min(debtor.amount, creditor.amount);
-
-    if (settleAmount > 0) {
-      transfers.push({
-        from: debtor.name,
-        to: creditor.name,
-        amount: settleAmount
-      });
-    }
-
-    debtor.amount -= settleAmount;
-    creditor.amount -= settleAmount;
-
-    if (debtor.amount === 0) di++;
-    if (creditor.amount === 0) ci++;
-  }
-
-  // Render transfers
-  if (transfers.length === 0) {
-    transfersSection.style.display = 'block';
-    transfersList.innerHTML = '<div class="all-settled-banner"><div class="big-check">✅</div><div class="settled-text">Everyone is settled up!</div></div>';
-  } else {
-    transfersSection.style.display = 'block';
-    transfersList.innerHTML = transfers.map((t, i) => `
-      <div class="transfer-item">
-        <div class="t-number">${i + 1}</div>
-        <span class="t-from">${t.from}</span>
-        <span class="t-arrow">→</span>
-        <span class="t-to">${t.to}</span>
-        <span class="t-amount">${formatCurrency(t.amount)}</span>
-      </div>
-    `).join('');
-  }
 }
 
+// ─── Stats ───
 function updateStats() {
-  document.getElementById('statPlayers').textContent = getPlayerNames().length;
-  let b = 0, r = 0;
-  data.transactions.forEach(t => { if (t.type === 'borrow') b += t.amount; else r += t.amount; });
-  document.getElementById('statBorrowed').textContent = formatCurrency(b);
-  document.getElementById('statReturned').textContent = formatCurrency(r);
-  document.getElementById('statOutstanding').textContent = formatCurrency(b - r);
-  updateIdentityBar();
-  updatePersonalStat();
-}
-
-// ─── Export / Import ───
-function exportData() {
-  const payload = { ...data, exportedAt: new Date().toISOString(), appVersion: APP_VERSION };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `poker-backup-${getToday()}.json`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  data.lastExported = new Date().toISOString();
-  saveData();
-  showToast('Backup exported!');
-}
-
-function importData(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const imported = JSON.parse(e.target.result);
-      if (!imported.players || !imported.transactions) { showToast('Invalid backup file!'); return; }
-      pendingImportData = imported;
-      document.getElementById('importPreview').innerHTML = `
-        <p>This backup contains:</p>
-        <p style="color:var(--text);margin-bottom:8px">
-          <strong>${imported.players.length}</strong> players and
-          <strong>${imported.transactions.length}</strong> transactions
-          ${imported.exportedAt ? '<br>Exported: ' + formatDateTime(imported.exportedAt) : ''}
-        </p>
-        <p>Data will be <strong>merged</strong> with your current data (duplicates skipped).</p>`;
-      document.getElementById('importModal').classList.add('active');
-    } catch(err) { showToast('Error reading file!'); }
-  };
-  reader.readAsText(file);
-  event.target.value = '';
-}
-
-function confirmImport() {
-  if (!pendingImportData) return;
-  const imported = pendingImportData;
-  const existP = new Set(getPlayerNames().map(n => n.toLowerCase()));
-  imported.players.forEach(p => {
-    const name = (typeof p === 'string' ? p : p.name).toLowerCase();
-    if (!existP.has(name)) {
-      data.players.push(typeof p === 'string' ? { name: p, addedAt: new Date().toISOString() } : p);
-      existP.add(name);
-    }
-  });
-  const existT = new Set(data.transactions.map(t => t.id));
-  imported.transactions.forEach(t => { if (!existT.has(t.id)) { data.transactions.push(t); existT.add(t.id); } });
-  data.transactions.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  saveData(); renderPlayers(); updateStats(); cancelImport();
-  showToast('Backup imported & merged!');
-}
-
-function cancelImport() {
-  pendingImportData = null;
-  document.getElementById('importModal').classList.remove('active');
-}
-
-function updateBackupStatus() {
-  const el = document.getElementById('backupStatus');
-  if (!el) return;
-  const n = data.transactions.length;
-  const last = data.lastExported;
-  if (n === 0) { el.innerHTML = '<span class="backup-dot"></span> No data to back up yet'; return; }
-  if (!last) { el.innerHTML = `<span class="backup-dot danger"></span> <strong>${n}</strong> transactions — never backed up! Export now.`; return; }
-  const days = Math.floor((Date.now() - new Date(last)) / 864e5);
-  const hasChanges = data.lastModified && new Date(data.lastModified) > new Date(last);
-  if (hasChanges && days > 7)
-    el.innerHTML = `<span class="backup-dot danger"></span> Last backup <strong>${days} days ago</strong> with unsaved changes. Export recommended!`;
-  else if (hasChanges)
-    el.innerHTML = `<span class="backup-dot warning"></span> Last backup: ${formatDateTime(last)}. You have changes since then.`;
-  else
-    el.innerHTML = `<span class="backup-dot"></span> Last backup: ${formatDateTime(last)}. All up to date!`;
-}
-
-function clearAllData() {
-  if (!requireOwner()) return;
-  if (!confirm('Delete ALL data? This cannot be undone! (Export a backup first)')) return;
-  if (!confirm('Are you absolutely sure? Only the Owner can do this.')) return;
-  logAdminAction('WIPED ALL DATA');
-  data = { version: APP_VERSION, createdAt: new Date().toISOString(), players: [], transactions: [] };
-  saveData(); renderPlayers(); updateStats();
-  showToast('All data cleared');
-}
-
-// ─── Identity Management ───
-let currentPlayer = localStorage.getItem('poker_identity') || null;
-
-function showIdentitySelector() {
-  const sel = document.getElementById('identitySelect');
-  sel.innerHTML = '<option value="">Select your name...</option>';
-  getPlayerNames().forEach(n => {
-    const icon = getPlayerIcon(n);
-    const prefix = icon ? icon + ' ' : '';
-    sel.innerHTML += `<option value="${n}">${prefix}${n}</option>`;
-  });
-  document.getElementById('identityOverlay').classList.remove('hidden');
-}
-
-function confirmIdentity() {
-  const sel = document.getElementById('identitySelect');
-  if (!sel.value) { showToast('Please select your name'); return; }
-  currentPlayer = sel.value;
-  localStorage.setItem('poker_identity', currentPlayer);
-  document.getElementById('identityOverlay').classList.add('hidden');
-  updateIdentityBar();
-  updateStats();
-}
-
-function skipIdentity() {
-  currentPlayer = null;
-  localStorage.removeItem('poker_identity');
-  document.getElementById('identityOverlay').classList.add('hidden');
-  updateIdentityBar();
-  updateStats();
-}
-
-function changeIdentity() {
-  showIdentitySelector();
-}
-
-function updateIdentityBar() {
-  const bar = document.getElementById('identityBar');
-  const personalWrap = document.getElementById('statPersonalWrap');
-  if (currentPlayer && getPlayerNames().includes(currentPlayer)) {
-    bar.style.display = 'flex';
-    const icon = getPlayerIcon(currentPlayer);
-    const iconHtml = icon ? icon + ' ' : '♠ ';
-    document.getElementById('identityName').innerHTML = iconHtml + currentPlayer;
-    personalWrap.style.display = 'block';
-  } else {
-    bar.style.display = 'none';
-    personalWrap.style.display = 'none';
-  }
-}
-
-function updatePersonalStat() {
-  if (!currentPlayer || !getPlayerNames().includes(currentPlayer)) return;
-  const t = getPlayerTotals(currentPlayer);
-  const el = document.getElementById('statPersonal');
-  const label = document.getElementById('statPersonalLabel');
-  if (t.net > 0) {
-    el.textContent = formatCurrency(t.net);
-    el.style.color = 'var(--red)';
-    label.textContent = 'You Owe';
-  } else if (t.net < 0) {
-    el.textContent = formatCurrency(-t.net);
-    el.style.color = 'var(--green)';
-    label.textContent = 'Owed to You';
-  } else {
-    el.textContent = '✓';
-    el.style.color = 'var(--green)';
-    label.textContent = 'You\'re Settled';
-  }
+  document.getElementById('statPlayers').textContent = data.players.length;
+  const borrowed = data.transactions.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+  const returned = data.transactions.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+  document.getElementById('statBorrowed').textContent = formatCurrency(borrowed);
+  document.getElementById('statReturned').textContent = formatCurrency(returned);
+  const out = borrowed - returned;
+  const el = document.getElementById('statOutstanding');
+  el.textContent = formatCurrency(out);
+  el.style.color = out > 0 ? 'var(--red)' : out < 0 ? 'var(--green)' : 'var(--text)';
 }
 
 // ─── Admin System: Owner + Moderators ───
-const ADMIN_KEYS = {
-  owner: 'poker_owner_pin',
-  mods: 'poker_moderators',    // JSON array of {name, pinHash}
-  auditLog: 'poker_audit_log', // JSON array of {timestamp, actor, actorRole, action}
-  session: 'poker_admin_session' // sessionStorage: {role, name}
-};
-
-let adminRole = null;   // null, 'owner', 'mod'
-let adminName = null;   // name of logged-in admin/mod
-let adminPinMode = null; // 'owner-setup','owner-login','mod-login','add-mod-pin','reset-owner'
+const ADMIN_KEYS = { owner:'poker_owner_pin', mods:'poker_moderators', auditLog:'poker_audit_log', session:'poker_admin_session' };
+let adminRole = null;
+let adminName = null;
+let adminPinMode = null;
+let pendingModName = '';
 
 function hashPin(pin, salt) {
   let hash = 0;
   const str = 'APC_' + (salt || '') + '_' + pin + '_2025';
-  for (let i = 0; i < str.length; i++) {
-    const ch = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + ch;
-    hash = hash & hash;
-  }
+  for (let i = 0; i < str.length; i++) { hash = ((hash << 5) - hash) + str.charCodeAt(i); hash = hash & hash; }
   return 'h_' + Math.abs(hash).toString(36);
 }
 
 function getOwnerPin() { return localStorage.getItem(ADMIN_KEYS.owner); }
 function hasOwner() { return !!getOwnerPin(); }
 function verifyOwnerPin(pin) { return hashPin(pin, 'owner') === getOwnerPin(); }
-
-function getMods() {
-  try { return JSON.parse(localStorage.getItem(ADMIN_KEYS.mods)) || []; } catch(e) { return []; }
-}
-function saveMods(mods) { localStorage.setItem(ADMIN_KEYS.mods, JSON.stringify(mods)); }
-
-function getAuditLog() {
-  try { return JSON.parse(localStorage.getItem(ADMIN_KEYS.auditLog)) || []; } catch(e) { return []; }
-}
-function saveAuditLog(log) { localStorage.setItem(ADMIN_KEYS.auditLog, JSON.stringify(log)); }
-
-function logAdminAction(action) {
-  const log = getAuditLog();
-  log.push({
-    timestamp: new Date().toISOString(),
-    actor: adminName || 'Owner',
-    role: adminRole || 'owner',
-    action
-  });
-  // Keep last 200 entries
-  if (log.length > 200) log.splice(0, log.length - 200);
-  saveAuditLog(log);
-}
-
+function getMods() { try { return JSON.parse(localStorage.getItem(ADMIN_KEYS.mods) || '[]'); } catch(e) { return []; } }
+function saveMods(m) { localStorage.setItem(ADMIN_KEYS.mods, JSON.stringify(m)); }
+function getAuditLog() { try { return JSON.parse(localStorage.getItem(ADMIN_KEYS.auditLog) || '[]'); } catch(e) { return []; } }
 function isOwner() { return adminRole === 'owner'; }
 function isMod() { return adminRole === 'mod'; }
 function isAdminAny() { return adminRole === 'owner' || adminRole === 'mod'; }
 
-// ─── PIN Modal Logic ───
-let pendingModName = '';
+function logAdminAction(action) {
+  const log = getAuditLog();
+  log.push({ timestamp: new Date().toISOString(), actor: adminName || 'Unknown', role: adminRole || 'unknown', action });
+  if (log.length > 200) log.splice(0, log.length - 200);
+  localStorage.setItem(ADMIN_KEYS.auditLog, JSON.stringify(log));
+}
 
 function toggleAdmin() {
   if (isAdminAny()) {
@@ -1328,127 +755,105 @@ function toggleAdmin() {
     showToast('Admin mode deactivated');
     return;
   }
-  // Show role selection
-  showAdminRoleSelect();
-}
-
-function showAdminRoleSelect() {
-  const mods = getMods();
-  const hasOwnerSetup = hasOwner();
-  let html = '<h3>🔑 Admin Login</h3>';
-  html += '<p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:16px">Select your role:</p>';
-  html += `<button class="btn btn-primary" style="width:100%;margin-bottom:10px;padding:14px" onclick="startAdminLogin('owner')">
-    👑 Owner${!hasOwnerSetup ? ' (First-time Setup)' : ''}
-  </button>`;
-  if (mods.length > 0) {
-    mods.forEach(m => {
-      html += `<button class="btn btn-secondary" style="width:100%;margin-bottom:8px;padding:12px" onclick="startAdminLogin('mod','${m.name.replace(/'/g,"\\'")}')">
-        🛡️ ${m.name} (Moderator)
-      </button>`;
-    });
-  }
-  html += `<div style="margin-top:14px;text-align:center">
-    <span style="font-size:0.82rem;color:var(--text-muted);cursor:pointer" onclick="cancelAdminPin()">Cancel</span>
-  </div>`;
-  document.getElementById('adminRoleContent').innerHTML = html;
-  document.getElementById('adminRoleModal').classList.add('active');
-}
-
-function startAdminLogin(role, modName) {
-  document.getElementById('adminRoleModal').classList.remove('active');
-  if (role === 'owner') {
-    if (!hasOwner()) {
-      adminPinMode = 'owner-setup';
-      document.getElementById('adminPinTitle').textContent = '👑 Set Owner PIN';
-      document.getElementById('adminPinMsg').textContent = 'Create your 4-digit Owner PIN. Only you can wipe data and manage moderators.';
-      document.getElementById('pinResetOption').style.display = 'none';
-    } else {
-      adminPinMode = 'owner-login';
-      document.getElementById('adminPinTitle').textContent = '👑 Owner PIN';
-      document.getElementById('adminPinMsg').textContent = 'Enter your Owner PIN.';
-      document.getElementById('pinResetOption').style.display = 'block';
-    }
-  } else {
-    pendingModName = modName;
-    adminPinMode = 'mod-login';
-    document.getElementById('adminPinTitle').textContent = '🛡️ Moderator PIN';
-    document.getElementById('adminPinMsg').textContent = `Enter PIN for ${modName}`;
+  if (!hasOwner()) {
+    adminPinMode = 'owner-setup';
+    document.getElementById('adminPinTitle').textContent = '👑 Set Owner PIN';
+    document.getElementById('adminPinMsg').textContent = 'Create a 4-digit PIN to protect admin controls. Remember this PIN!';
     document.getElementById('pinResetOption').style.display = 'none';
+  } else {
+    adminPinMode = 'choose-role';
+    document.getElementById('adminPinTitle').textContent = '🔐 Login As';
+    const mods = getMods();
+    let msg = '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:4px">';
+    msg += `<button class="btn btn-primary" onclick="startOwnerLogin()" style="width:100%">👑 Owner</button>`;
+    mods.forEach(m => { msg += `<button class="btn btn-outline" onclick="startModLogin('${m.name.replace(/'/g,"\\'")}'')" style="width:100%">🛡️ ${m.name}</button>`; });
+    msg += '</div>';
+    document.getElementById('adminPinMsg').innerHTML = msg;
+    document.getElementById('pinResetOption').style.display = 'none';
+    // Hide pin row for role choose
+    document.querySelector('.pin-row').style.display = 'none';
+    document.querySelector('.modal-actions').style.display = 'none';
+    document.getElementById('adminPinModal').classList.add('active');
+    return;
   }
   clearPinInputs();
   document.getElementById('pinError').textContent = '';
+  document.querySelector('.pin-row').style.display = 'flex';
+  document.querySelector('.modal-actions').style.display = 'flex';
   document.getElementById('adminPinModal').classList.add('active');
   setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
 }
 
-function pinDigitInput(el) {
-  const val = el.value.replace(/\D/g, '');
-  el.value = val;
-  if (val && parseInt(el.dataset.idx) < 3) {
-    const next = document.querySelector(`.pin-digit[data-idx="${parseInt(el.dataset.idx) + 1}"]`);
-    if (next) next.focus();
-  }
-  const allFilled = Array.from(document.querySelectorAll('.pin-digit')).every(d => d.value.length === 1);
-  if (allFilled) submitAdminPin();
-}
+window.startOwnerLogin = function() {
+  adminPinMode = 'owner-login';
+  document.getElementById('adminPinTitle').textContent = '👑 Owner PIN';
+  document.getElementById('adminPinMsg').textContent = 'Enter your 4-digit Owner PIN.';
+  document.getElementById('pinResetOption').style.display = '';
+  document.querySelector('.pin-row').style.display = 'flex';
+  document.querySelector('.modal-actions').style.display = 'flex';
+  clearPinInputs();
+  document.getElementById('pinError').textContent = '';
+  setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+};
 
-function pinDigitKeydown(e, el) {
-  if (e.key === 'Backspace' && !el.value && parseInt(el.dataset.idx) > 0) {
-    const prev = document.querySelector(`.pin-digit[data-idx="${parseInt(el.dataset.idx) - 1}"]`);
-    if (prev) { prev.focus(); prev.value = ''; }
-    e.preventDefault();
-  }
-}
+window.startModLogin = function(name) {
+  pendingModName = name;
+  adminPinMode = 'mod-login';
+  document.getElementById('adminPinTitle').textContent = `🛡️ ${name} PIN`;
+  document.getElementById('adminPinMsg').textContent = `Enter the moderator PIN for ${name}.`;
+  document.getElementById('pinResetOption').style.display = 'none';
+  document.querySelector('.pin-row').style.display = 'flex';
+  document.querySelector('.modal-actions').style.display = 'flex';
+  clearPinInputs();
+  document.getElementById('pinError').textContent = '';
+  setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+};
 
-function clearPinInputs() {
-  document.querySelectorAll('.pin-digit').forEach(d => d.value = '');
-}
+// PIN input behavior
+document.querySelectorAll('.pin-digit').forEach((input, idx) => {
+  input.addEventListener('input', () => {
+    input.value = input.value.replace(/[^0-9]/g, '');
+    if (input.value && idx < 3) document.querySelector(`.pin-digit[data-idx="${idx+1}"]`).focus();
+    if (idx === 3 && input.value) submitPin();
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Backspace' && !input.value && idx > 0) document.querySelector(`.pin-digit[data-idx="${idx-1}"]`).focus();
+  });
+});
 
-function getPinValue() {
-  return Array.from(document.querySelectorAll('.pin-digit')).map(d => d.value).join('');
-}
+function clearPinInputs() { document.querySelectorAll('.pin-digit').forEach(i => i.value = ''); }
 
-function submitAdminPin() {
-  const pin = getPinValue();
+function getPin() { return Array.from(document.querySelectorAll('.pin-digit')).map(i => i.value).join(''); }
+
+window.submitPin = function() {
+  const pin = getPin();
+  if (pin.length < 4) return;
   const err = document.getElementById('pinError');
-  if (pin.length !== 4) { err.textContent = 'Enter all 4 digits'; return; }
 
   if (adminPinMode === 'owner-setup') {
     localStorage.setItem(ADMIN_KEYS.owner, hashPin(pin, 'owner'));
     adminRole = 'owner'; adminName = 'Owner';
-    sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role: 'owner', name: 'Owner' }));
-    logAdminAction('Owner PIN created');
+    sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role:'owner', name:'Owner' }));
+    logAdminAction('Owner PIN set up');
     cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
-    showToast('👑 Owner PIN set! You have full control.');
-
+    showToast('👑 Owner mode activated! You have full control.');
   } else if (adminPinMode === 'owner-login') {
     if (verifyOwnerPin(pin)) {
       adminRole = 'owner'; adminName = 'Owner';
-      sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role: 'owner', name: 'Owner' }));
+      sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role:'owner', name:'Owner' }));
       logAdminAction('Owner logged in');
       cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
       showToast('👑 Owner mode activated!');
-    } else {
-      err.textContent = 'Wrong PIN.';
-      clearPinInputs();
-      document.querySelector('.pin-digit[data-idx="0"]').focus();
-    }
-
+    } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
   } else if (adminPinMode === 'mod-login') {
-    const mods = getMods();
-    const mod = mods.find(m => m.name === pendingModName);
+    const mod = getMods().find(m => m.name === pendingModName);
     if (mod && hashPin(pin, mod.name) === mod.pinHash) {
       adminRole = 'mod'; adminName = mod.name;
-      sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role: 'mod', name: mod.name }));
+      sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role:'mod', name:mod.name }));
       logAdminAction(`Moderator "${mod.name}" logged in`);
       cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
       showToast(`🛡️ Moderator mode: ${mod.name}`);
-    } else {
-      err.textContent = 'Wrong PIN.';
-      clearPinInputs();
-      document.querySelector('.pin-digit[data-idx="0"]').focus();
-    }
-
+    } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
   } else if (adminPinMode === 'add-mod-pin') {
     const mods = getMods();
     mods.push({ name: pendingModName, pinHash: hashPin(pin, pendingModName), addedAt: new Date().toISOString() });
@@ -1457,26 +862,27 @@ function submitAdminPin() {
     cancelAdminPin();
     showToast(`🛡️ ${pendingModName} added as moderator!`);
     if (document.getElementById('tab-admin').style.display !== 'none') renderAdminPanel();
-
   } else if (adminPinMode === 'reset-owner') {
     localStorage.setItem(ADMIN_KEYS.owner, hashPin(pin, 'owner'));
     adminRole = 'owner'; adminName = 'Owner';
-    sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role: 'owner', name: 'Owner' }));
+    sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role:'owner', name:'Owner' }));
     logAdminAction('Owner PIN was reset');
     cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
     showToast('👑 Owner PIN reset!');
   }
-}
+};
 
-function cancelAdminPin() {
+window.cancelAdminPin = function() {
   adminPinMode = null; pendingModName = '';
   clearPinInputs();
+  document.querySelector('.pin-row').style.display = 'flex';
+  document.querySelector('.modal-actions').style.display = 'flex';
   document.getElementById('adminPinModal').classList.remove('active');
-}
+};
 
-function resetAdminPin() {
+window.resetAdminPin = function() {
   cancelAdminPin();
-  if (!confirm('To reset your Owner PIN, you must verify with your current PIN first. If you truly forgot it, the only option is clearing browser data.\n\nProceed to set a new PIN?')) return;
+  if (!confirm('To reset your Owner PIN, you must set a new one. If you truly forgot it, the only option is clearing browser data.\n\nProceed to set a new PIN?')) return;
   adminPinMode = 'reset-owner';
   document.getElementById('adminPinTitle').textContent = '👑 New Owner PIN';
   document.getElementById('adminPinMsg').textContent = 'Enter a new 4-digit Owner PIN.';
@@ -1485,113 +891,12 @@ function resetAdminPin() {
   document.getElementById('pinError').textContent = '';
   document.getElementById('adminPinModal').classList.add('active');
   setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
-}
-
-// ─── Admin Panel (Owner only) ───
-function renderAdminPanel() {
-  const panel = document.getElementById('adminPanelContent');
-  if (!isOwner()) {
-    panel.innerHTML = '<div class="admin-lock-msg"><div class="lock-icon">👑</div>Only the Owner can access this panel.</div>';
-    return;
-  }
-
-  const mods = getMods();
-  const log = getAuditLog().reverse().slice(0, 50);
-
-  let html = '';
-
-  // Moderator management
-  html += '<div style="margin-bottom:24px">';
-  html += '<div class="section-title" style="margin-bottom:12px"><span class="icon">🛡️</span> Moderators (' + mods.length + '/3)</div>';
-  if (mods.length === 0) {
-    html += '<p style="color:var(--text-dim);font-size:0.9rem">No moderators yet. Add up to 3 players as moderators.</p>';
-  } else {
-    html += '<div style="display:flex;flex-direction:column;gap:8px">';
-    mods.forEach((m, i) => {
-      html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
-        <div><strong style="color:var(--text)">${m.name}</strong> <span class="admin-badge" style="font-size:0.7rem">🛡️ Mod</span>
-        <br><span style="font-size:0.78rem;color:var(--text-muted)">Added: ${m.addedAt ? formatDateTime(m.addedAt) : 'Unknown'}</span></div>
-        <button class="btn btn-danger btn-sm" onclick="removeMod(${i})">Remove</button>
-      </div>`;
-    });
-    html += '</div>';
-  }
-  if (mods.length < 3) {
-    html += `<div class="input-row" style="margin-top:12px">
-      <select id="addModSelect"><option value="">Select player to make moderator...</option></select>
-      <button class="btn btn-primary" onclick="addModerator()">Add Moderator</button>
-    </div>`;
-  }
-  html += '</div>';
-
-  // Audit log
-  html += '<div>';
-  html += '<div class="section-title" style="margin-bottom:12px;border-top:1px solid var(--border);padding-top:20px"><span class="icon">📝</span> Admin Audit Log</div>';
-  if (log.length === 0) {
-    html += '<p style="color:var(--text-dim);font-size:0.9rem">No admin actions recorded yet.</p>';
-  } else {
-    html += '<div class="history-list" style="max-height:300px">';
-    log.forEach(entry => {
-      const roleIcon = entry.role === 'owner' ? '👑' : '🛡️';
-      html += `<div class="history-item" style="border-left:3px solid ${entry.role === 'owner' ? '#f59e0b' : 'var(--border)'}">
-        <span class="time">${formatDateTime(entry.timestamp)}</span>
-        <span class="detail">${roleIcon} <strong>${entry.actor}</strong></span>
-        <span style="font-size:0.85rem;color:var(--text-dim);flex:2">${entry.action}</span>
-      </div>`;
-    });
-    html += '</div>';
-  }
-  html += '</div>';
-
-  panel.innerHTML = html;
-
-  // Populate mod select dropdown
-  const sel = document.getElementById('addModSelect');
-  if (sel) {
-    const modNames = mods.map(m => m.name.toLowerCase());
-    getPlayerNames().forEach(n => {
-      if (!modNames.includes(n.toLowerCase())) {
-        sel.innerHTML += `<option value="${n}">${n}</option>`;
-      }
-    });
-  }
-}
-
-function addModerator() {
-  const sel = document.getElementById('addModSelect');
-  if (!sel || !sel.value) { showToast('Select a player first'); return; }
-  const mods = getMods();
-  if (mods.length >= 3) { showToast('Maximum 3 moderators!'); return; }
-  if (mods.find(m => m.name.toLowerCase() === sel.value.toLowerCase())) { showToast('Already a moderator!'); return; }
-
-  pendingModName = sel.value;
-  adminPinMode = 'add-mod-pin';
-  document.getElementById('adminPinTitle').textContent = '🛡️ Set Moderator PIN';
-  document.getElementById('adminPinMsg').textContent = `Set a 4-digit PIN for ${pendingModName}. Share this PIN with them privately.`;
-  document.getElementById('pinResetOption').style.display = 'none';
-  clearPinInputs();
-  document.getElementById('pinError').textContent = '';
-  document.getElementById('adminPinModal').classList.add('active');
-  setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
-}
-
-function removeMod(index) {
-  if (!isOwner()) return;
-  const mods = getMods();
-  const name = mods[index]?.name;
-  if (!confirm(`Remove ${name} as moderator?`)) return;
-  mods.splice(index, 1);
-  saveMods(mods);
-  logAdminAction(`Removed moderator "${name}"`);
-  renderAdminPanel();
-  showToast(`${name} removed as moderator`);
-}
+};
 
 function updateAdminUI() {
   const toggle = document.getElementById('adminToggle');
   const badge = document.getElementById('adminBadge');
   const adminTab = document.getElementById('adminTabBtn');
-
   if (isAdminAny()) {
     toggle.classList.add('active');
     toggle.innerHTML = isOwner() ? '👑 Owner' : '🛡️ Mod';
@@ -1605,8 +910,6 @@ function updateAdminUI() {
     toggle.innerHTML = '🔒 Admin';
     badge.style.display = 'none';
   }
-
-  // Show/hide admin tab
   if (adminTab) adminTab.style.display = isOwner() ? '' : 'none';
 }
 
@@ -1624,32 +927,201 @@ function requireOwner() {
   return false;
 }
 
-// ─── Init ───
-function init() {
-  // Restore admin session
-  try {
-    const sess = JSON.parse(sessionStorage.getItem(ADMIN_KEYS.session));
-    if (sess && sess.role) {
-      if (sess.role === 'owner' && hasOwner()) { adminRole = 'owner'; adminName = 'Owner'; }
-      else if (sess.role === 'mod') {
-        const mods = getMods();
-        if (mods.find(m => m.name === sess.name)) { adminRole = 'mod'; adminName = sess.name; }
-      }
-    }
-  } catch(e) {}
-  renderPlayers(); updateStats(); updateAdminUI();
-  // Check if saved identity is still a valid player
-  if (currentPlayer && getPlayerNames().includes(currentPlayer)) {
-    document.getElementById('identityOverlay').classList.add('hidden');
-    updateIdentityBar();
-  } else if (getPlayerNames().length > 0) {
-    showIdentitySelector();
+// ─── Admin Panel ───
+function renderAdminPanel() {
+  const panel = document.getElementById('adminPanelContent');
+  if (!isOwner()) {
+    panel.innerHTML = '<div class="admin-lock-msg"><div class="lock-icon">👑</div>Only the Owner can access this panel.</div>';
+    return;
+  }
+  const mods = getMods();
+  const log = getAuditLog().reverse().slice(0, 50);
+  let html = '<div style="margin-bottom:24px">';
+  html += '<div class="section-title" style="margin-bottom:12px"><span class="icon">🛡️</span> Moderators (' + mods.length + '/3)</div>';
+  if (mods.length === 0) {
+    html += '<p style="color:var(--text-dim);font-size:0.9rem">No moderators yet. Add up to 3 players as moderators.</p>';
   } else {
-    // No players yet, skip identity
-    document.getElementById('identityOverlay').classList.add('hidden');
+    html += '<div style="display:flex;flex-direction:column;gap:8px">';
+    mods.forEach((m, i) => {
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
+        <div><strong>${m.name}</strong> <span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:rgba(99,102,241,0.12);color:#818cf8">🛡️ Mod</span>
+        <br><span style="font-size:0.78rem;color:var(--text-muted)">Added: ${m.addedAt ? formatDateTime(m.addedAt) : 'Unknown'}</span></div>
+        <button class="btn btn-danger btn-sm" onclick="removeMod(${i})">Remove</button>
+      </div>`;
+    });
+    html += '</div>';
+  }
+  if (mods.length < 3) {
+    html += `<div class="input-row" style="margin-top:12px">
+      <select id="addModSelect"><option value="">Select player to make moderator...</option></select>
+      <button class="btn btn-primary" onclick="addModerator()">Add Moderator</button>
+    </div>`;
+  }
+  html += '</div>';
+  html += '<div><div class="section-title" style="margin-bottom:12px;border-top:1px solid var(--border);padding-top:20px"><span class="icon">📝</span> Admin Audit Log</div>';
+  if (log.length === 0) {
+    html += '<p style="color:var(--text-dim);font-size:0.9rem">No admin actions recorded yet.</p>';
+  } else {
+    html += '<div class="history-list" style="max-height:300px">';
+    log.forEach(entry => {
+      const ri = entry.role === 'owner' ? '👑' : '🛡️';
+      html += `<div class="history-item" style="border-left:3px solid ${entry.role==='owner'?'#f59e0b':'var(--border)'}">
+        <span class="h-time">${formatDateTime(entry.timestamp)}</span>
+        <span style="font-size:0.85rem;color:var(--text-dim)">${ri} <strong>${entry.actor}</strong></span>
+        <span style="font-size:0.85rem;color:var(--text-dim);flex:2">${entry.action}</span>
+      </div>`;
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  panel.innerHTML = html;
+  const sel = document.getElementById('addModSelect');
+  if (sel) {
+    const modNames = mods.map(m => m.name.toLowerCase());
+    getPlayerNames().forEach(n => { if (!modNames.includes(n.toLowerCase())) sel.innerHTML += `<option value="${n}">${n}</option>`; });
   }
 }
-init();
+
+window.addModerator = function() {
+  const sel = document.getElementById('addModSelect');
+  if (!sel || !sel.value) return showToast('Select a player first');
+  if (getMods().length >= 3) return showToast('Maximum 3 moderators!');
+  pendingModName = sel.value;
+  adminPinMode = 'add-mod-pin';
+  document.getElementById('adminPinTitle').textContent = '🛡️ Set Moderator PIN';
+  document.getElementById('adminPinMsg').textContent = `Set a 4-digit PIN for ${pendingModName}. Share this PIN with them privately.`;
+  document.getElementById('pinResetOption').style.display = 'none';
+  clearPinInputs();
+  document.getElementById('pinError').textContent = '';
+  document.querySelector('.pin-row').style.display = 'flex';
+  document.querySelector('.modal-actions').style.display = 'flex';
+  document.getElementById('adminPinModal').classList.add('active');
+  setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+};
+
+window.removeMod = function(index) {
+  if (!isOwner()) return;
+  const mods = getMods();
+  const name = mods[index]?.name;
+  if (!confirm(`Remove ${name} as moderator?`)) return;
+  mods.splice(index, 1);
+  saveMods(mods);
+  logAdminAction(`Removed moderator "${name}"`);
+  renderAdminPanel();
+  showToast(`${name} removed as moderator`);
+};
+
+// ─── Export / Import ───
+function exportData() {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `almere-poker-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  localStorage.setItem('poker_last_export', new Date().toISOString());
+  updateBackupStatus();
+  showToast('📤 Backup exported!');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      pendingImportData = JSON.parse(e.target.result);
+      const preview = document.getElementById('importPreview');
+      preview.innerHTML = `<p><strong>File:</strong> ${file.name}</p>
+        <p><strong>Players:</strong> ${pendingImportData.players?.length || 0}</p>
+        <p><strong>Transactions:</strong> ${pendingImportData.transactions?.length || 0}</p>
+        <p style="margin-top:8px;color:var(--accent)">Data will be merged with existing data. No duplicates.</p>`;
+      document.getElementById('importModal').classList.add('active');
+    } catch(err) { showToast('Invalid backup file'); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+window.cancelImport = function() {
+  pendingImportData = null;
+  document.getElementById('importModal').classList.remove('active');
+};
+
+window.confirmImport = function() {
+  if (!pendingImportData) return;
+  const imp = pendingImportData;
+  if (imp.players) {
+    imp.players.forEach(p => {
+      if (!data.players.find(x => x.name.toLowerCase() === p.name.toLowerCase())) data.players.push(p);
+    });
+  }
+  if (imp.transactions) {
+    const existingIds = new Set(data.transactions.map(t => t.id));
+    imp.transactions.forEach(t => { if (!existingIds.has(t.id)) data.transactions.push(t); });
+  }
+  pendingImportData = null;
+  document.getElementById('importModal').classList.remove('active');
+  saveData();
+  refreshUI();
+  logAdminAction('Imported backup data');
+  showToast('📥 Data imported successfully!');
+};
+
+function updateBackupStatus() {
+  const el = document.getElementById('backupStatus');
+  if (!el) return;
+  const lastExport = localStorage.getItem('poker_last_export');
+  if (!lastExport) {
+    el.innerHTML = '<span class="backup-dot danger"></span> No backups yet. Export recommended!';
+  } else {
+    el.innerHTML = `<span class="backup-dot"></span> Last backup: ${formatDateTime(lastExport)}`;
+  }
+}
+
+// ─── Clear All ───
+window.clearAllData = function() {
+  if (!requireOwner()) return;
+  if (!confirm('This will permanently delete ALL players and transactions. Are you sure?')) return;
+  if (!confirm('Really? This cannot be undone! (Tip: export a backup first)')) return;
+  data = defaultData();
+  saveData();
+  logAdminAction('Wiped all data');
+  refreshUI();
+  showToast('All data cleared');
+};
+
+// ─── Refresh UI ───
+function refreshUI() {
+  renderPlayers();
+  updateStats();
+  updateBackupStatus();
+  updateAdminUI();
+}
+
+// ─── Init ───
+// Restore admin session
+try {
+  const sess = JSON.parse(sessionStorage.getItem(ADMIN_KEYS.session) || 'null');
+  if (sess) { adminRole = sess.role; adminName = sess.name; }
+} catch(e) {}
+
+refreshUI();
+
+// Expose to window for onclick handlers
+window.addPlayer = addPlayer;
+window.removePlayer = removePlayer;
+window.recordBorrow = recordBorrow;
+window.recordReturn = recordReturn;
+window.deleteTransaction = deleteTransaction;
+window.switchTab = switchTab;
+window.toggleAdmin = toggleAdmin;
+window.exportData = exportData;
+window.importData = importData;
+window.requireAdmin = requireAdmin;
+window.requireOwner = requireOwner;
+
 </script>
 </body>
 </html>
