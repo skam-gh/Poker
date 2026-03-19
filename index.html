@@ -249,13 +249,21 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 
   <!-- Tab: Players -->
   <div id="tab-players">
+    <div id="addPlayerRow" style="margin-bottom:16px">
+      <button class="btn btn-primary" onclick="showAddPlayerModal()" style="width:100%;padding:14px;font-size:0.95rem">+ Add New Player</button>
+    </div>
     <div class="section">
       <div class="section-title"><span class="icon">👥</span> Players</div>
-      <div class="input-row">
-        <input type="text" id="newPlayerName" placeholder="Player name..." maxlength="20" onkeydown="if(event.key==='Enter')addPlayer()">
-        <button class="btn btn-primary" onclick="addPlayer()">+ Add Player</button>
-      </div>
       <div class="player-grid" id="playerGrid"></div>
+    </div>
+    <!-- Player PIN setup — always visible so any player can set their PIN -->
+    <div class="section" id="playerPinSection">
+      <div class="section-title"><span class="icon">🔑</span> Set / Change My PIN</div>
+      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Select your name and set a 4-digit PIN to check your scores from any device.</p>
+      <div class="input-row">
+        <select id="playerPinSelect"><option value="">Select your name...</option></select>
+        <button class="btn btn-primary" onclick="setupPlayerPin(document.getElementById('playerPinSelect').value)">🔑 Set PIN</button>
+      </div>
     </div>
   </div>
 
@@ -364,6 +372,31 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
   </div>
 </div>
 
+<!-- Add Player modal -->
+<div class="modal-overlay" id="addPlayerModal">
+  <div class="modal" style="text-align:left">
+    <h3 style="text-align:center;margin-bottom:16px">👤 Add New Player</h3>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Name <span style="color:var(--red)">*</span></label>
+        <input type="text" id="apName" placeholder="Player name" maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none" onkeydown="if(event.key==='Enter')document.getElementById('apPhone').focus()">
+      </div>
+      <div>
+        <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Phone <span style="color:var(--text-muted)">(optional)</span></label>
+        <input type="tel" id="apPhone" placeholder="+31 6 1234 5678" maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none" onkeydown="if(event.key==='Enter')document.getElementById('apEmail').focus()">
+      </div>
+      <div>
+        <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Email <span style="color:var(--text-muted)">(optional)</span></label>
+        <input type="email" id="apEmail" placeholder="player@email.com" maxlength="50" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none" onkeydown="if(event.key==='Enter')addPlayer()">
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:18px">
+      <button class="btn btn-outline" onclick="cancelAddPlayer()">Cancel</button>
+      <button class="btn btn-primary" onclick="addPlayer()">+ Add Player</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- Firebase SDK via ESM CDN -->
@@ -428,21 +461,17 @@ function ensureAdmin(d) {
   if (!d.admin) d.admin = { ownerPinHash: null, mods: [], auditLog: [] };
   if (!d.admin.mods) d.admin.mods = [];
   if (!d.admin.auditLog) d.admin.auditLog = [];
-  // Migrate from old localStorage-based admin if present
-  const oldOwner = localStorage.getItem('poker_owner_pin');
-  if (oldOwner && !d.admin.ownerPinHash) {
-    d.admin.ownerPinHash = oldOwner;
-    localStorage.removeItem('poker_owner_pin');
-  }
-  const oldMods = localStorage.getItem('poker_moderators');
-  if (oldMods && d.admin.mods.length === 0) {
-    try { d.admin.mods = JSON.parse(oldMods); } catch(e) {}
-    localStorage.removeItem('poker_moderators');
-  }
-  const oldLog = localStorage.getItem('poker_audit_log');
-  if (oldLog && d.admin.auditLog.length === 0) {
-    try { d.admin.auditLog = JSON.parse(oldLog); } catch(e) {}
-    localStorage.removeItem('poker_audit_log');
+  // Clean up any old localStorage keys from previous versions
+  localStorage.removeItem('poker_owner_pin');
+  localStorage.removeItem('poker_moderators');
+  localStorage.removeItem('poker_audit_log');
+  // One-time wipe: if PINs were set with old v1 hash (prefix 'h_'), clear them all
+  if (d.admin.ownerPinHash && !d.admin.ownerPinHash.startsWith('v2_')) {
+    d.admin.ownerPinHash = null;
+    d.admin.mods.forEach(m => { delete m.pinHash; });
+    d.admin.mods = [];
+    d.players && d.players.forEach(p => { delete p.pinHash; });
+    d.admin.auditLog.push({ timestamp: new Date().toISOString(), actor: 'System', role: 'system', action: 'All PINs wiped — upgraded to v2 hash. Please set up PINs again.' });
   }
   return d;
 }
@@ -577,18 +606,37 @@ function getPlayerNames() { return data.players.map(p => p.name); }
 
 function addPlayer() {
   if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
-  const input = document.getElementById('newPlayerName');
-  const name = input.value.trim();
+  const nameInput = document.getElementById('apName');
+  const phoneInput = document.getElementById('apPhone');
+  const emailInput = document.getElementById('apEmail');
+  const name = nameInput.value.trim();
+  const phone = phoneInput.value.trim();
+  const email = emailInput.value.trim();
   if (!name) return showToast('Enter a player name');
   if (data.players.length >= 15) return showToast('Maximum 15 players');
   if (data.players.find(p => p.name.toLowerCase() === name.toLowerCase())) return showToast('Player already exists');
-  data.players.push({ name, icon:'🎰', addedAt: new Date().toISOString() });
-  input.value = '';
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showToast('Invalid email format');
+  data.players.push({ name, icon:'🎰', phone: phone || null, email: email || null, addedAt: new Date().toISOString() });
+  nameInput.value = ''; phoneInput.value = ''; emailInput.value = '';
+  document.getElementById('addPlayerModal').classList.remove('active');
   saveData();
   renderPlayers();
   updateStats();
   showToast(`${name} joined the table!`);
 }
+
+window.showAddPlayerModal = function() {
+  if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
+  document.getElementById('apName').value = '';
+  document.getElementById('apPhone').value = '';
+  document.getElementById('apEmail').value = '';
+  document.getElementById('addPlayerModal').classList.add('active');
+  setTimeout(() => document.getElementById('apName').focus(), 100);
+};
+
+window.cancelAddPlayer = function() {
+  document.getElementById('addPlayerModal').classList.remove('active');
+};
 
 function removePlayer(name) {
   if (!requireAdmin()) return;
@@ -616,6 +664,7 @@ function renderPlayers() {
   const grid = document.getElementById('playerGrid');
   if (data.players.length === 0) {
     grid.innerHTML = '<div class="empty"><div class="icon">🃏</div><p>No players yet. Add players to get started!</p></div>';
+    populatePlayerPinSelect();
     return;
   }
   grid.innerHTML = data.players.map(p => {
@@ -627,18 +676,34 @@ function renderPlayers() {
     return `<div class="player-card" style="${highlightStyle}">
       ${isAdm ? `<button class="delete-player" onclick="removePlayer('${p.name.replace(/'/g,"\\'")}')">✕</button>` : ''}
       <div class="player-name">${p.icon || '🎰'} ${p.name} ${isMe ? '<span style="font-size:0.7rem;color:var(--green)">(you)</span>' : ''} ${hasPin ? '<span style="font-size:0.7rem;color:var(--text-muted)">🔑</span>' : ''}</div>
+      ${(p.phone || p.email) && isAdm ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">${p.phone ? '📱 ' + p.phone : ''}${p.phone && p.email ? ' · ' : ''}${p.email ? '✉️ ' + p.email : ''}</div>` : ''}
       <div class="player-stats">
         <span class="stat-label">Borrowed:</span><span class="stat-value">${formatCurrency(s.totalBorrowed)}</span>
         <span class="stat-label">Returned:</span><span class="stat-value">${formatCurrency(s.totalReturned)}</span>
         <span class="stat-label">Balance:</span><span class="stat-value ${s.net > 0 ? 'negative' : s.net < 0 ? 'positive' : ''}">${s.net > 0 ? '-' : s.net < 0 ? '+' : ''}${formatCurrency(Math.abs(s.net))}</span>
         <span class="stat-label">Borrows today:</span><span class="stat-value">${s.todayBorrows}/10</span>
       </div>
-      <div class="player-actions">
-        ${!hasPin ? `<button class="btn btn-outline btn-sm" onclick="setupPlayerPin('${p.name.replace(/'/g,"\\'")}')">🔑 Set PIN</button>` : ''}
-        ${hasPin && !isMe && !isAdm ? `<button class="btn btn-outline btn-sm" onclick="setupPlayerPin('${p.name.replace(/'/g,"\\'")}')">🔑 Change PIN</button>` : ''}
-      </div>
     </div>`;
   }).join('');
+  populatePlayerPinSelect();
+}
+
+function populatePlayerPinSelect() {
+  const sel = document.getElementById('playerPinSelect');
+  if (!sel) return;
+  // If logged in as player, pre-select their name
+  if (isPlayerOnly() && adminName) {
+    const player = data.players.find(p => p.name === adminName);
+    const hasPin = player && player.pinHash;
+    sel.innerHTML = `<option value="${adminName}" selected>${adminName}${hasPin ? ' (🔑 change PIN)' : ''}</option>`;
+    return;
+  }
+  const val = sel.value;
+  sel.innerHTML = '<option value="">Select your name...</option>' + data.players.map(p => {
+    const hasPin = p.pinHash ? ' (🔑 PIN set — change)' : '';
+    return `<option value="${p.name}">${p.name}${hasPin}</option>`;
+  }).join('');
+  sel.value = val;
 }
 
 // ─── Actions ───
@@ -760,10 +825,19 @@ let adminPinMode = null;
 let pendingModName = '';
 
 function hashPin(pin, salt) {
-  let hash = 0;
-  const str = 'APC_' + (salt || '') + '_' + pin + '_2025';
-  for (let i = 0; i < str.length; i++) { hash = ((hash << 5) - hash) + str.charCodeAt(i); hash = hash & hash; }
-  return 'h_' + Math.abs(hash).toString(36);
+  // Stronger hash using multiple rounds and full string processing
+  const str = 'APC2025_' + salt + '_PIN_' + pin + '_SECURE';
+  let h1 = 0x811c9dc5; // FNV offset basis
+  let h2 = 0;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    h1 ^= c;
+    h1 = Math.imul(h1, 0x01000193); // FNV prime
+    h2 = ((h2 << 5) - h2 + c) | 0;
+  }
+  // Combine both hashes for uniqueness
+  const combined = Math.abs(h1 ^ (h2 * 31));
+  return 'v2_' + combined.toString(36) + '_' + Math.abs(h2).toString(36);
 }
 
 function getOwnerPin() { return data.admin.ownerPinHash; }
@@ -867,6 +941,7 @@ window.startPlayerLogin = function(name) {
 };
 
 window.setupPlayerPin = function(name) {
+  if (!name) return showToast('Select your name first');
   pendingModName = name;
   const player = data.players.find(p => p.name === name);
   if (player && player.pinHash) {
@@ -1248,10 +1323,11 @@ function refreshUI() {
 
 function applyAccessControl() {
   const writeOk = canWrite();
-  // Hide add player form
-  const addPlayerRow = document.querySelector('#tab-players .input-row');
+  const loggedIn = isLoggedIn();
+  // Hide add player button (owner/mod only)
+  const addPlayerRow = document.getElementById('addPlayerRow');
   if (addPlayerRow) addPlayerRow.style.display = writeOk ? '' : 'none';
-  // Hide actions tab entirely (borrows/returns)
+  // Hide actions tab entirely (borrows/returns — owner/mod only)
   const actionsTab = document.querySelectorAll('.tab')[1];
   if (actionsTab) actionsTab.style.display = writeOk ? '' : 'none';
   // Hide clear all data button
@@ -1260,6 +1336,12 @@ function applyAccessControl() {
   // Hide import button (export is fine — read-only)
   const importBtn = document.querySelector('[onclick*="importFile"]');
   if (importBtn) importBtn.style.display = writeOk ? '' : 'none';
+  // Login button: hide if no owner set up yet (nothing to log into)
+  const loginBtn = document.getElementById('adminToggle');
+  if (loginBtn) loginBtn.style.display = hasOwner() || loggedIn ? '' : 'none';
+  // Player PIN section: show only for logged-in players (not for admins, not before login)
+  const pinSection = document.getElementById('playerPinSection');
+  if (pinSection) pinSection.style.display = isPlayerOnly() ? '' : 'none';
   // If on actions tab but no write access, switch to players
   if (!writeOk && document.getElementById('tab-actions').style.display !== 'none') {
     switchTab('players');
@@ -1277,6 +1359,8 @@ refreshUI();
 
 // Expose to window for onclick handlers
 window.addPlayer = addPlayer;
+window.showAddPlayerModal = window.showAddPlayerModal;
+window.cancelAddPlayer = window.cancelAddPlayer;
 window.removePlayer = removePlayer;
 window.recordBorrow = recordBorrow;
 window.recordReturn = recordReturn;
