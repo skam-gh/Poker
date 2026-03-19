@@ -223,7 +223,7 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
   <!-- Identity bar -->
   <div class="identity-bar">
     <div class="identity-left">
-      <button class="admin-toggle" id="adminToggle" onclick="toggleAdmin()">🔒 Admin</button>
+      <button class="admin-toggle" id="adminToggle" onclick="toggleAdmin()">🔒 Login</button>
       <span class="admin-badge" id="adminBadge"></span>
     </div>
     <span style="font-size:0.8rem;color:var(--text-muted)" id="syncIndicator">☁️ Cloud synced</span>
@@ -421,7 +421,30 @@ const STORAGE_KEY = 'poker_tracker_v3';
 const APP_VERSION = '3.0';
 
 function defaultData() {
-  return { version: APP_VERSION, createdAt: new Date().toISOString(), players: [], transactions: [] };
+  return { version: APP_VERSION, createdAt: new Date().toISOString(), players: [], transactions: [], admin: { ownerPinHash: null, mods: [], auditLog: [] } };
+}
+
+function ensureAdmin(d) {
+  if (!d.admin) d.admin = { ownerPinHash: null, mods: [], auditLog: [] };
+  if (!d.admin.mods) d.admin.mods = [];
+  if (!d.admin.auditLog) d.admin.auditLog = [];
+  // Migrate from old localStorage-based admin if present
+  const oldOwner = localStorage.getItem('poker_owner_pin');
+  if (oldOwner && !d.admin.ownerPinHash) {
+    d.admin.ownerPinHash = oldOwner;
+    localStorage.removeItem('poker_owner_pin');
+  }
+  const oldMods = localStorage.getItem('poker_moderators');
+  if (oldMods && d.admin.mods.length === 0) {
+    try { d.admin.mods = JSON.parse(oldMods); } catch(e) {}
+    localStorage.removeItem('poker_moderators');
+  }
+  const oldLog = localStorage.getItem('poker_audit_log');
+  if (oldLog && d.admin.auditLog.length === 0) {
+    try { d.admin.auditLog = JSON.parse(oldLog); } catch(e) {}
+    localStorage.removeItem('poker_audit_log');
+  }
+  return d;
 }
 
 function loadLocal() {
@@ -431,6 +454,7 @@ function loadLocal() {
       const p = JSON.parse(raw);
       if (!p.players) p.players = [];
       if (!p.transactions) p.transactions = [];
+      ensureAdmin(p);
       return p;
     }
   } catch(e) {}
@@ -484,6 +508,7 @@ function listenToCloud() {
         const remote = snap.data();
         if (remote.lastModified && data.lastModified && remote.lastModified > data.lastModified) {
           data = remote;
+          ensureAdmin(data);
           saveLocal();
           refreshUI();
           showToast('☁️ Data synced from cloud');
@@ -502,6 +527,7 @@ let data = loadLocal();
   const cloud = await loadFromCloud();
   if (cloud && cloud.lastModified && (!data.lastModified || cloud.lastModified > data.lastModified)) {
     data = cloud;
+    ensureAdmin(data);
     saveLocal();
     refreshUI();
   } else if (data.players.length > 0 && firebaseReady) {
@@ -550,6 +576,7 @@ function switchTab(tab) {
 function getPlayerNames() { return data.players.map(p => p.name); }
 
 function addPlayer() {
+  if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
   const input = document.getElementById('newPlayerName');
   const name = input.value.trim();
   if (!name) return showToast('Enter a player name');
@@ -594,14 +621,21 @@ function renderPlayers() {
   grid.innerHTML = data.players.map(p => {
     const s = getPlayerStats(p.name);
     const isAdm = isAdminAny();
-    return `<div class="player-card">
+    const isMe = adminRole === 'player' && adminName === p.name;
+    const hasPin = !!p.pinHash;
+    const highlightStyle = isMe ? 'border-color:var(--green);box-shadow:0 0 12px rgba(52,211,153,0.15)' : '';
+    return `<div class="player-card" style="${highlightStyle}">
       ${isAdm ? `<button class="delete-player" onclick="removePlayer('${p.name.replace(/'/g,"\\'")}')">✕</button>` : ''}
-      <div class="player-name">${p.icon || '🎰'} ${p.name}</div>
+      <div class="player-name">${p.icon || '🎰'} ${p.name} ${isMe ? '<span style="font-size:0.7rem;color:var(--green)">(you)</span>' : ''} ${hasPin ? '<span style="font-size:0.7rem;color:var(--text-muted)">🔑</span>' : ''}</div>
       <div class="player-stats">
         <span class="stat-label">Borrowed:</span><span class="stat-value">${formatCurrency(s.totalBorrowed)}</span>
         <span class="stat-label">Returned:</span><span class="stat-value">${formatCurrency(s.totalReturned)}</span>
         <span class="stat-label">Balance:</span><span class="stat-value ${s.net > 0 ? 'negative' : s.net < 0 ? 'positive' : ''}">${s.net > 0 ? '-' : s.net < 0 ? '+' : ''}${formatCurrency(Math.abs(s.net))}</span>
         <span class="stat-label">Borrows today:</span><span class="stat-value">${s.todayBorrows}/10</span>
+      </div>
+      <div class="player-actions">
+        ${!hasPin ? `<button class="btn btn-outline btn-sm" onclick="setupPlayerPin('${p.name.replace(/'/g,"\\'")}')">🔑 Set PIN</button>` : ''}
+        ${hasPin && !isMe && !isAdm ? `<button class="btn btn-outline btn-sm" onclick="setupPlayerPin('${p.name.replace(/'/g,"\\'")}')">🔑 Change PIN</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -625,6 +659,7 @@ function populateSelects() {
 }
 
 function recordBorrow() {
+  if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
   const player = document.getElementById('borrowPlayer').value;
   const amount = parseFloat(document.getElementById('borrowAmount').value);
   if (!player) return showToast('Select a player');
@@ -641,6 +676,7 @@ function recordBorrow() {
 }
 
 function recordReturn() {
+  if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
   const player = document.getElementById('returnPlayer').value;
   const amount = parseFloat(document.getElementById('returnAmount').value);
   if (!player) return showToast('Select a player');
@@ -716,8 +752,8 @@ function updateStats() {
   el.style.color = out > 0 ? 'var(--red)' : out < 0 ? 'var(--green)' : 'var(--text)';
 }
 
-// ─── Admin System: Owner + Moderators ───
-const ADMIN_KEYS = { owner:'poker_owner_pin', mods:'poker_moderators', auditLog:'poker_audit_log', session:'poker_admin_session' };
+// ─── Admin System: Owner + Moderators (stored in data.admin → synced to cloud) ───
+const ADMIN_SESSION_KEY = 'poker_admin_session';
 let adminRole = null;
 let adminName = null;
 let adminPinMode = null;
@@ -730,29 +766,32 @@ function hashPin(pin, salt) {
   return 'h_' + Math.abs(hash).toString(36);
 }
 
-function getOwnerPin() { return localStorage.getItem(ADMIN_KEYS.owner); }
+function getOwnerPin() { return data.admin.ownerPinHash; }
 function hasOwner() { return !!getOwnerPin(); }
 function verifyOwnerPin(pin) { return hashPin(pin, 'owner') === getOwnerPin(); }
-function getMods() { try { return JSON.parse(localStorage.getItem(ADMIN_KEYS.mods) || '[]'); } catch(e) { return []; } }
-function saveMods(m) { localStorage.setItem(ADMIN_KEYS.mods, JSON.stringify(m)); }
-function getAuditLog() { try { return JSON.parse(localStorage.getItem(ADMIN_KEYS.auditLog) || '[]'); } catch(e) { return []; } }
+function getMods() { return data.admin.mods || []; }
+function saveMods(m) { data.admin.mods = m; saveData(); }
+function getAuditLog() { return data.admin.auditLog || []; }
 function isOwner() { return adminRole === 'owner'; }
 function isMod() { return adminRole === 'mod'; }
 function isAdminAny() { return adminRole === 'owner' || adminRole === 'mod'; }
+function isPlayerOnly() { return adminRole === 'player'; }
+function isLoggedIn() { return adminRole !== null; }
+function canWrite() { return isAdminAny(); /* only owner and moderators can write */ }
 
 function logAdminAction(action) {
-  const log = getAuditLog();
-  log.push({ timestamp: new Date().toISOString(), actor: adminName || 'Unknown', role: adminRole || 'unknown', action });
-  if (log.length > 200) log.splice(0, log.length - 200);
-  localStorage.setItem(ADMIN_KEYS.auditLog, JSON.stringify(log));
+  if (!data.admin.auditLog) data.admin.auditLog = [];
+  data.admin.auditLog.push({ timestamp: new Date().toISOString(), actor: adminName || 'Unknown', role: adminRole || 'unknown', action });
+  if (data.admin.auditLog.length > 200) data.admin.auditLog.splice(0, data.admin.auditLog.length - 200);
+  saveData();
 }
 
 function toggleAdmin() {
-  if (isAdminAny()) {
+  if (isAdminAny() || adminRole === 'player') {
     adminRole = null; adminName = null;
-    sessionStorage.removeItem(ADMIN_KEYS.session);
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
     updateAdminUI(); renderPlayers(); renderHistory();
-    showToast('Admin mode deactivated');
+    showToast('Logged out');
     return;
   }
   if (!hasOwner()) {
@@ -764,13 +803,18 @@ function toggleAdmin() {
     adminPinMode = 'choose-role';
     document.getElementById('adminPinTitle').textContent = '🔐 Login As';
     const mods = getMods();
-    let msg = '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:4px">';
+    const playersWithPins = data.players.filter(p => p.pinHash);
+    let msg = '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;max-height:320px;overflow-y:auto">';
+    msg += `<div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:4px 0">Admin</div>`;
     msg += `<button class="btn btn-primary" onclick="startOwnerLogin()" style="width:100%">👑 Owner</button>`;
-    mods.forEach(m => { msg += `<button class="btn btn-outline" onclick="startModLogin('${m.name.replace(/'/g,"\\'")}'')" style="width:100%">🛡️ ${m.name}</button>`; });
+    mods.forEach(m => { msg += `<button class="btn btn-outline" onclick="startModLogin('${m.name.replace(/'/g,"\\'")}')" style="width:100%">🛡️ ${m.name}</button>`; });
+    if (playersWithPins.length > 0) {
+      msg += `<div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:8px 0 4px;border-top:1px solid var(--border);margin-top:4px">Players</div>`;
+      playersWithPins.forEach(p => { msg += `<button class="btn btn-outline" onclick="startPlayerLogin('${p.name.replace(/'/g,"\\'")}')" style="width:100%">🎰 ${p.name}</button>`; });
+    }
     msg += '</div>';
     document.getElementById('adminPinMsg').innerHTML = msg;
     document.getElementById('pinResetOption').style.display = 'none';
-    // Hide pin row for role choose
     document.querySelector('.pin-row').style.display = 'none';
     document.querySelector('.modal-actions').style.display = 'none';
     document.getElementById('adminPinModal').classList.add('active');
@@ -809,6 +853,55 @@ window.startModLogin = function(name) {
   setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
 };
 
+window.startPlayerLogin = function(name) {
+  pendingModName = name;
+  adminPinMode = 'player-login';
+  document.getElementById('adminPinTitle').textContent = `🎰 ${name}`;
+  document.getElementById('adminPinMsg').textContent = `Enter your 4-digit PIN to view your scores.`;
+  document.getElementById('pinResetOption').style.display = 'none';
+  document.querySelector('.pin-row').style.display = 'flex';
+  document.querySelector('.modal-actions').style.display = 'flex';
+  clearPinInputs();
+  document.getElementById('pinError').textContent = '';
+  setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+};
+
+window.setupPlayerPin = function(name) {
+  pendingModName = name;
+  const player = data.players.find(p => p.name === name);
+  if (player && player.pinHash) {
+    // Player already has a PIN — need to verify first
+    adminPinMode = 'player-verify-before-reset';
+    document.getElementById('adminPinTitle').textContent = `🔑 ${name} — Verify Current PIN`;
+    document.getElementById('adminPinMsg').textContent = 'Enter your current PIN to change it.';
+  } else {
+    adminPinMode = 'player-setup';
+    document.getElementById('adminPinTitle').textContent = `🔑 Set PIN for ${name}`;
+    document.getElementById('adminPinMsg').textContent = 'Create a 4-digit PIN. You can use this to check your scores from any device.';
+  }
+  document.getElementById('pinResetOption').style.display = 'none';
+  document.querySelector('.pin-row').style.display = 'flex';
+  document.querySelector('.modal-actions').style.display = 'flex';
+  clearPinInputs();
+  document.getElementById('pinError').textContent = '';
+  document.getElementById('adminPinModal').classList.add('active');
+  setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+};
+
+window.adminResetPlayerPin = function(name) {
+  if (!isAdminAny()) return;
+  if (!confirm(`Reset PIN for ${name}? They will need to set a new one.`)) return;
+  const player = data.players.find(p => p.name === name);
+  if (player) {
+    delete player.pinHash;
+    saveData();
+    logAdminAction(`Reset PIN for player "${name}"`);
+    renderAdminPanel();
+    renderPlayers();
+    showToast(`🔑 PIN reset for ${name}`);
+  }
+};
+
 // PIN input behavior
 document.querySelectorAll('.pin-digit').forEach((input, idx) => {
   input.addEventListener('input', () => {
@@ -831,16 +924,16 @@ window.submitPin = function() {
   const err = document.getElementById('pinError');
 
   if (adminPinMode === 'owner-setup') {
-    localStorage.setItem(ADMIN_KEYS.owner, hashPin(pin, 'owner'));
+    data.admin.ownerPinHash = hashPin(pin, 'owner'); saveData();
     adminRole = 'owner'; adminName = 'Owner';
-    sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role:'owner', name:'Owner' }));
+    sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:'Owner' }));
     logAdminAction('Owner PIN set up');
     cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
     showToast('👑 Owner mode activated! You have full control.');
   } else if (adminPinMode === 'owner-login') {
     if (verifyOwnerPin(pin)) {
       adminRole = 'owner'; adminName = 'Owner';
-      sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role:'owner', name:'Owner' }));
+      sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:'Owner' }));
       logAdminAction('Owner logged in');
       cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
       showToast('👑 Owner mode activated!');
@@ -849,7 +942,7 @@ window.submitPin = function() {
     const mod = getMods().find(m => m.name === pendingModName);
     if (mod && hashPin(pin, mod.name) === mod.pinHash) {
       adminRole = 'mod'; adminName = mod.name;
-      sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role:'mod', name:mod.name }));
+      sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'mod', name:mod.name }));
       logAdminAction(`Moderator "${mod.name}" logged in`);
       cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
       showToast(`🛡️ Moderator mode: ${mod.name}`);
@@ -863,12 +956,39 @@ window.submitPin = function() {
     showToast(`🛡️ ${pendingModName} added as moderator!`);
     if (document.getElementById('tab-admin').style.display !== 'none') renderAdminPanel();
   } else if (adminPinMode === 'reset-owner') {
-    localStorage.setItem(ADMIN_KEYS.owner, hashPin(pin, 'owner'));
+    data.admin.ownerPinHash = hashPin(pin, 'owner'); saveData();
     adminRole = 'owner'; adminName = 'Owner';
-    sessionStorage.setItem(ADMIN_KEYS.session, JSON.stringify({ role:'owner', name:'Owner' }));
+    sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:'Owner' }));
     logAdminAction('Owner PIN was reset');
     cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
     showToast('👑 Owner PIN reset!');
+  } else if (adminPinMode === 'player-setup') {
+    const player = data.players.find(p => p.name === pendingModName);
+    if (player) {
+      player.pinHash = hashPin(pin, 'player_' + pendingModName);
+      saveData();
+      cancelAdminPin();
+      renderPlayers();
+      showToast(`🔑 PIN set for ${pendingModName}!`);
+    }
+  } else if (adminPinMode === 'player-login') {
+    const player = data.players.find(p => p.name === pendingModName);
+    if (player && player.pinHash === hashPin(pin, 'player_' + pendingModName)) {
+      adminRole = 'player'; adminName = pendingModName;
+      sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'player', name:pendingModName }));
+      cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
+      showToast(`🎰 Welcome, ${pendingModName}!`);
+    } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
+  } else if (adminPinMode === 'player-verify-before-reset') {
+    const player = data.players.find(p => p.name === pendingModName);
+    if (player && player.pinHash === hashPin(pin, 'player_' + pendingModName)) {
+      adminPinMode = 'player-setup';
+      document.getElementById('adminPinTitle').textContent = `🔑 New PIN for ${pendingModName}`;
+      document.getElementById('adminPinMsg').textContent = 'Enter your new 4-digit PIN.';
+      clearPinInputs();
+      document.getElementById('pinError').textContent = '';
+      setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+    } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
   }
 };
 
@@ -905,9 +1025,17 @@ function updateAdminUI() {
     badge.style.borderColor = isOwner() ? 'rgba(245,158,11,0.25)' : 'rgba(99,102,241,0.25)';
     badge.style.color = isOwner() ? '#f59e0b' : '#818cf8';
     badge.style.background = isOwner() ? 'rgba(245,158,11,0.12)' : 'rgba(99,102,241,0.12)';
+  } else if (adminRole === 'player') {
+    toggle.classList.add('active');
+    toggle.innerHTML = `🎰 ${adminName}`;
+    badge.style.display = 'inline-flex';
+    badge.innerHTML = `🎰 ${adminName}`;
+    badge.style.borderColor = 'rgba(52,211,153,0.25)';
+    badge.style.color = '#34d399';
+    badge.style.background = 'rgba(52,211,153,0.12)';
   } else {
     toggle.classList.remove('active');
-    toggle.innerHTML = '🔒 Admin';
+    toggle.innerHTML = '🔒 Login';
     badge.style.display = 'none';
   }
   if (adminTab) adminTab.style.display = isOwner() ? '' : 'none';
@@ -956,6 +1084,23 @@ function renderAdminPanel() {
       <select id="addModSelect"><option value="">Select player to make moderator...</option></select>
       <button class="btn btn-primary" onclick="addModerator()">Add Moderator</button>
     </div>`;
+  }
+  html += '</div>';
+  // Player PIN management
+  html += '<div style="margin-bottom:24px;border-top:1px solid var(--border);padding-top:20px">';
+  html += '<div class="section-title" style="margin-bottom:12px"><span class="icon">🔑</span> Player PINs</div>';
+  const playersWithPins = data.players.filter(p => p.pinHash);
+  if (playersWithPins.length === 0) {
+    html += '<p style="color:var(--text-dim);font-size:0.9rem">No players have set up PINs yet.</p>';
+  } else {
+    html += '<div style="display:flex;flex-direction:column;gap:8px">';
+    playersWithPins.forEach(p => {
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
+        <div><strong>${p.name}</strong> <span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:rgba(52,211,153,0.12);color:#34d399">🔑 PIN set</span></div>
+        <button class="btn btn-danger btn-sm" onclick="adminResetPlayerPin('${p.name.replace(/'/g,"\\'")}')">Reset PIN</button>
+      </div>`;
+    });
+    html += '</div>';
   }
   html += '</div>';
   html += '<div><div class="section-title" style="margin-bottom:12px;border-top:1px solid var(--border);padding-top:20px"><span class="icon">📝</span> Admin Audit Log</div>';
@@ -1098,12 +1243,33 @@ function refreshUI() {
   updateStats();
   updateBackupStatus();
   updateAdminUI();
+  applyAccessControl();
+}
+
+function applyAccessControl() {
+  const writeOk = canWrite();
+  // Hide add player form
+  const addPlayerRow = document.querySelector('#tab-players .input-row');
+  if (addPlayerRow) addPlayerRow.style.display = writeOk ? '' : 'none';
+  // Hide actions tab entirely (borrows/returns)
+  const actionsTab = document.querySelectorAll('.tab')[1];
+  if (actionsTab) actionsTab.style.display = writeOk ? '' : 'none';
+  // Hide clear all data button
+  const clearBtn = document.querySelector('.clear-all');
+  if (clearBtn) clearBtn.style.display = writeOk ? '' : 'none';
+  // Hide import button (export is fine — read-only)
+  const importBtn = document.querySelector('[onclick*="importFile"]');
+  if (importBtn) importBtn.style.display = writeOk ? '' : 'none';
+  // If on actions tab but no write access, switch to players
+  if (!writeOk && document.getElementById('tab-actions').style.display !== 'none') {
+    switchTab('players');
+  }
 }
 
 // ─── Init ───
 // Restore admin session
 try {
-  const sess = JSON.parse(sessionStorage.getItem(ADMIN_KEYS.session) || 'null');
+  const sess = JSON.parse(sessionStorage.getItem(ADMIN_SESSION_KEY) || 'null');
   if (sess) { adminRole = sess.role; adminName = sess.name; }
 } catch(e) {}
 
@@ -1121,6 +1287,8 @@ window.exportData = exportData;
 window.importData = importData;
 window.requireAdmin = requireAdmin;
 window.requireOwner = requireOwner;
+window.setupPlayerPin = window.setupPlayerPin;
+window.adminResetPlayerPin = window.adminResetPlayerPin;
 
 </script>
 </body>
