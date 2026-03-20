@@ -70,6 +70,7 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 .input-row { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
 .input-row input, .input-row select { flex:1; min-width:120px; padding:10px 14px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-size:0.9rem; font-family:inherit; outline:none; transition:border-color 0.2s; }
 .input-row input:focus, .input-row select:focus { border-color:var(--accent); }
+.input-row input[type="datetime-local"] { color-scheme:dark; }
 .input-row select { cursor:pointer; }
 .input-row select option { background:var(--bg); }
 
@@ -154,7 +155,7 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 .modal h3 { margin-bottom:8px; font-size:1.1rem; }
 .modal p { color:var(--text-dim); font-size:0.88rem; margin-bottom:20px; }
 .pin-row { display:flex; gap:10px; justify-content:center; margin-bottom:16px; }
-.pin-digit { width:50px; height:56px; text-align:center; font-size:1.5rem; font-weight:700; background:var(--bg); border:2px solid var(--border); border-radius:var(--radius-sm); color:var(--accent); outline:none; font-family:inherit; transition:border-color 0.2s; }
+.pin-digit { width:42px; height:50px; text-align:center; font-size:1.3rem; font-weight:700; background:var(--bg); border:2px solid var(--border); border-radius:var(--radius-sm); color:var(--accent); outline:none; font-family:inherit; transition:border-color 0.2s; }
 .pin-digit:focus { border-color:var(--accent); }
 .pin-error { color:var(--red); font-size:0.85rem; min-height:20px; margin-bottom:12px; }
 .modal-actions { display:flex; gap:8px; justify-content:center; }
@@ -180,6 +181,31 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 ::-webkit-scrollbar-track { background:transparent; }
 ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
 ::-webkit-scrollbar-thumb:hover { background:var(--text-muted); }
+
+/* Stats */
+.leaderboard-row { display:flex; align-items:center; gap:12px; padding:12px 16px; background:var(--bg); border-radius:var(--radius-sm); margin-bottom:6px; border-left:3px solid var(--border); }
+.leaderboard-row.rank-1 { border-left-color:#f5d96b; background:rgba(245,217,107,0.06); }
+.leaderboard-row.rank-2 { border-left-color:#c0c0c0; }
+.leaderboard-row.rank-3 { border-left-color:#cd7f32; }
+.lb-rank { font-size:1.3rem; min-width:32px; text-align:center; }
+.lb-name { font-weight:600; flex:1; }
+.lb-amount { font-weight:700; font-size:1rem; }
+.lb-tag { font-size:0.7rem; padding:2px 8px; border-radius:10px; font-weight:600; }
+.lb-tag.winner { background:var(--green-dim); color:var(--green); }
+.lb-tag.loser { background:var(--red-dim); color:var(--red); }
+.lb-tag.even { background:rgba(139,145,158,0.15); color:var(--text-dim); }
+.stat-detail-card { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:10px; }
+.stat-detail-name { font-weight:700; font-size:1rem; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+.stat-detail-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.stat-detail-grid .sd-item { text-align:center; padding:8px; background:var(--surface); border-radius:var(--radius-sm); }
+.sd-item .sd-label { font-size:0.72rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; }
+.sd-item .sd-value { font-size:1.1rem; font-weight:700; margin-top:2px; }
+.overview-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.overview-card { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:16px; text-align:center; }
+.overview-card .ov-icon { font-size:1.5rem; margin-bottom:6px; }
+.overview-card .ov-label { font-size:0.78rem; color:var(--text-dim); margin-bottom:4px; }
+.overview-card .ov-value { font-size:1.2rem; font-weight:700; }
+.overview-card .ov-name { font-size:0.85rem; color:var(--accent); margin-top:2px; }
 
 /* Responsive */
 @media(max-width:600px) {
@@ -243,7 +269,7 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
     <div class="tab" onclick="switchTab('actions')">💰 Actions</div>
     <div class="tab" onclick="switchTab('history')">📜 History</div>
     <div class="tab" onclick="switchTab('settlement')">⚖️ Settlement</div>
-    <div class="tab" onclick="switchTab('data')">💾 Backup</div>
+    <div class="tab" onclick="switchTab('stats')">📊 Stats</div>
     <div class="tab" id="adminTabBtn" style="display:none" onclick="switchTab('admin')">👑 Admin</div>
   </div>
 
@@ -259,7 +285,7 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
     <!-- Player PIN setup — always visible so any player can set their PIN -->
     <div class="section" id="playerPinSection">
       <div class="section-title"><span class="icon">🔑</span> Set / Change My PIN</div>
-      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Select your name and set a 4-digit PIN to check your scores from any device.</p>
+      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Select your name and set a 6-digit PIN to check your scores from any device.</p>
       <div class="input-row">
         <select id="playerPinSelect"><option value="">Select your name...</option></select>
         <button class="btn btn-primary" onclick="setupPlayerPin(document.getElementById('playerPinSelect').value)">🔑 Set PIN</button>
@@ -273,18 +299,44 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
       <div class="section-title"><span class="icon">💸</span> Record Borrow</div>
       <div class="input-row">
         <select id="borrowPlayer"><option value="">Select player...</option></select>
-        <input type="number" id="borrowAmount" placeholder="Amount (€)" min="1" step="1" onkeydown="if(event.key==='Enter')recordBorrow()">
+        <input type="number" id="borrowAmount" placeholder="Amount (€)" min="1" step="1">
+      </div>
+      <div class="input-row">
+        <input type="datetime-local" id="borrowDate" style="color:var(--text-dim)">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('borrowDate').value=''" style="white-space:nowrap">Now</button>
         <button class="btn btn-danger" onclick="recordBorrow()">- Borrow</button>
       </div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">Leave date empty for current time, or pick a past date for old records.</div>
       <div id="borrowInfo" style="font-size:0.82rem;color:var(--text-dim);margin-top:4px"></div>
     </div>
     <div class="section">
       <div class="section-title"><span class="icon">💰</span> Record Return</div>
       <div class="input-row">
         <select id="returnPlayer"><option value="">Select player...</option></select>
-        <input type="number" id="returnAmount" placeholder="Amount (€)" min="1" step="1" onkeydown="if(event.key==='Enter')recordReturn()">
+        <input type="number" id="returnAmount" placeholder="Amount (€)" min="1" step="1">
+      </div>
+      <div class="input-row">
+        <input type="datetime-local" id="returnDate" style="color:var(--text-dim)">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('returnDate').value=''" style="white-space:nowrap">Now</button>
         <button class="btn btn-primary" onclick="recordReturn()" style="background:var(--green);color:#0c0f14">+ Return</button>
       </div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">Leave date empty for current time, or pick a past date for old records.</div>
+    </div>
+  </div>
+
+  <!-- Tab: Stats -->
+  <div id="tab-stats" style="display:none">
+    <div class="section">
+      <div class="section-title"><span class="icon">🏆</span> Leaderboard</div>
+      <div id="leaderboard"></div>
+    </div>
+    <div class="section">
+      <div class="section-title"><span class="icon">📊</span> Player Statistics</div>
+      <div id="playerStatsDetail"></div>
+    </div>
+    <div class="section">
+      <div class="section-title"><span class="icon">🎯</span> Club Overview</div>
+      <div id="clubOverview"></div>
     </div>
   </div>
 
@@ -304,27 +356,6 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
     </div>
   </div>
 
-  <!-- Tab: Backup -->
-  <div id="tab-data" style="display:none">
-    <div class="section">
-      <div class="section-title"><span class="icon">💾</span> Backup & Restore</div>
-      <p style="color:var(--text-dim);font-size:0.88rem;margin-bottom:14px">Your data is stored in the cloud (Firebase). Backups are optional but recommended for extra safety.</p>
-      <div class="data-actions">
-        <button class="btn btn-primary" onclick="exportData()">📤 Export Data</button>
-        <button class="btn btn-outline" onclick="if(requireAdmin()) document.getElementById('importFile').click()">📥 Import Backup</button>
-        <input type="file" id="importFile" class="file-input-hidden" accept=".json" onchange="importData(event)">
-      </div>
-      <div id="backupStatus" class="backup-status"></div>
-      <div class="data-info">
-        <strong>How it works:</strong><br><br>
-        <strong>Cloud sync:</strong> All data is automatically saved to Firebase Firestore. You can access it from any device.<br><br>
-        <strong>Export</strong> downloads a <code>.json</code> backup file. Save it to Google Drive or OneDrive for extra safety.<br><br>
-        <strong>Import</strong> restores data from a previously exported file. Data is <em>merged</em> with existing data (no duplicates).<br><br>
-        <strong>Offline mode:</strong> The app works offline using local storage and syncs to cloud when back online.
-      </div>
-    </div>
-  </div>
-
   <!-- Tab: Admin -->
   <div id="tab-admin" style="display:none">
     <div class="section">
@@ -333,9 +364,21 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
     </div>
   </div>
 
-  <!-- Footer -->
+  <!-- Footer with Backup -->
   <div class="footer">
-    <p>☁️ Cloud synced via Firebase · Local backup available</p>
+    <p>☁️ Cloud synced via Firebase</p>
+    <button class="btn btn-outline" onclick="toggleBackupPanel()" style="margin:10px 0;font-size:0.85rem" id="backupToggleBtn">💾 Backup & Restore</button>
+    <div id="backupPanel" style="display:none;text-align:left;margin-top:12px">
+      <div class="section" style="margin-bottom:12px">
+        <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Your data is stored in the cloud. Backups are optional but recommended for extra safety.</p>
+        <div class="data-actions">
+          <button class="btn btn-primary" onclick="exportData()">📤 Export</button>
+          <button class="btn btn-outline" onclick="if(requireAdmin()) document.getElementById('importFile').click()">📥 Import</button>
+          <input type="file" id="importFile" class="file-input-hidden" accept=".json" onchange="importData(event)">
+        </div>
+        <div id="backupStatus" class="backup-status"></div>
+      </div>
+    </div>
     <button class="clear-all" onclick="clearAllData()">⚠ Clear All Data</button>
   </div>
 </div>
@@ -344,12 +387,14 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 <div class="modal-overlay" id="adminPinModal">
   <div class="modal">
     <h3 id="adminPinTitle">🔑 Enter PIN</h3>
-    <p id="adminPinMsg">Enter your 4-digit PIN</p>
+    <p id="adminPinMsg">Enter your 6-digit PIN</p>
     <div class="pin-row">
       <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" data-idx="0" autocomplete="off">
       <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" data-idx="1" autocomplete="off">
       <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" data-idx="2" autocomplete="off">
       <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" data-idx="3" autocomplete="off">
+      <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" data-idx="4" autocomplete="off">
+      <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" data-idx="5" autocomplete="off">
     </div>
     <div class="pin-error" id="pinError"></div>
     <div class="modal-actions">
@@ -465,13 +510,13 @@ function ensureAdmin(d) {
   localStorage.removeItem('poker_owner_pin');
   localStorage.removeItem('poker_moderators');
   localStorage.removeItem('poker_audit_log');
-  // One-time wipe: if PINs were set with old v1 hash (prefix 'h_'), clear them all
-  if (d.admin.ownerPinHash && !d.admin.ownerPinHash.startsWith('v2_')) {
+  // One-time wipe: if PINs were set with old hash (prefix 'h_' or 'v2_'), clear them — now using v3 (6-digit)
+  if (d.admin.ownerPinHash && !d.admin.ownerPinHash.startsWith('v3_')) {
     d.admin.ownerPinHash = null;
     d.admin.mods.forEach(m => { delete m.pinHash; });
     d.admin.mods = [];
     d.players && d.players.forEach(p => { delete p.pinHash; });
-    d.admin.auditLog.push({ timestamp: new Date().toISOString(), actor: 'System', role: 'system', action: 'All PINs wiped — upgraded to v2 hash. Please set up PINs again.' });
+    d.admin.auditLog.push({ timestamp: new Date().toISOString(), actor: 'System', role: 'system', action: 'All PINs wiped — upgraded to 6-digit PIN. Please set up PINs again.' });
   }
   return d;
 }
@@ -588,7 +633,7 @@ function formatDateTime(iso) {
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 // ─── Tabs ───
-const ALL_TABS = ['players','actions','history','settlement','data','admin'];
+const ALL_TABS = ['players','actions','history','settlement','stats','admin'];
 function switchTab(tab) {
   document.querySelectorAll('.tab').forEach((el,i) => el.classList.toggle('active', ALL_TABS[i] === tab));
   ALL_TABS.forEach(t => {
@@ -596,6 +641,7 @@ function switchTab(tab) {
     if (el) el.style.display = t === tab ? '' : 'none';
   });
   if (tab === 'actions') populateSelects();
+  if (tab === 'stats') renderStats();
   if (tab === 'history') renderHistory();
   if (tab === 'settlement') renderSettlement();
   if (tab === 'admin') renderAdminPanel();
@@ -727,31 +773,41 @@ function recordBorrow() {
   if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
   const player = document.getElementById('borrowPlayer').value;
   const amount = parseFloat(document.getElementById('borrowAmount').value);
+  const dateVal = document.getElementById('borrowDate').value;
   if (!player) return showToast('Select a player');
   if (!amount || amount <= 0) return showToast('Enter a valid amount');
-  const s = getPlayerStats(player);
-  if (s.todayBorrows >= 10) return showToast(`${player} has reached 10 borrows today!`);
-  data.transactions.push({ id: genId(), player, type:'borrow', amount, timestamp: new Date().toISOString() });
+  const timestamp = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();
+  // Only enforce daily borrow limit for today's transactions
+  if (!dateVal) {
+    const s = getPlayerStats(player);
+    if (s.todayBorrows >= 10) return showToast(`${player} has reached 10 borrows today!`);
+  }
+  data.transactions.push({ id: genId(), player, type:'borrow', amount, timestamp });
   document.getElementById('borrowAmount').value = '';
+  document.getElementById('borrowDate').value = '';
   saveData();
   updateStats();
   renderPlayers();
-  document.getElementById('borrowPlayer').onchange();
-  showToast(`${player} borrowed ${formatCurrency(amount)}`);
+  const dateLabel = dateVal ? ' (backdated)' : '';
+  showToast(`${player} borrowed ${formatCurrency(amount)}${dateLabel}`);
 }
 
 function recordReturn() {
   if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
   const player = document.getElementById('returnPlayer').value;
   const amount = parseFloat(document.getElementById('returnAmount').value);
+  const dateVal = document.getElementById('returnDate').value;
   if (!player) return showToast('Select a player');
   if (!amount || amount <= 0) return showToast('Enter a valid amount');
-  data.transactions.push({ id: genId(), player, type:'return', amount, timestamp: new Date().toISOString() });
+  const timestamp = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();
+  data.transactions.push({ id: genId(), player, type:'return', amount, timestamp });
   document.getElementById('returnAmount').value = '';
+  document.getElementById('returnDate').value = '';
   saveData();
   updateStats();
   renderPlayers();
-  showToast(`${player} returned ${formatCurrency(amount)}`);
+  const dateLabel = dateVal ? ' (backdated)' : '';
+  showToast(`${player} returned ${formatCurrency(amount)}${dateLabel}`);
 }
 
 // ─── History ───
@@ -817,6 +873,105 @@ function updateStats() {
   el.style.color = out > 0 ? 'var(--red)' : out < 0 ? 'var(--green)' : 'var(--text)';
 }
 
+// ─── Stats Tab ───
+function renderStats() {
+  if (data.players.length === 0) {
+    document.getElementById('leaderboard').innerHTML = '<div class="empty"><div class="icon">🏆</div><p>Add players and record transactions to see stats.</p></div>';
+    document.getElementById('playerStatsDetail').innerHTML = '';
+    document.getElementById('clubOverview').innerHTML = '';
+    return;
+  }
+
+  // Build player stats array
+  const playerData = data.players.map(p => {
+    const txns = data.transactions.filter(t => t.player === p.name);
+    const borrows = txns.filter(t => t.type === 'borrow');
+    const returns = txns.filter(t => t.type === 'return');
+    const totalBorrowed = borrows.reduce((s,t) => s + t.amount, 0);
+    const totalReturned = returns.reduce((s,t) => s + t.amount, 0);
+    const net = totalBorrowed - totalReturned; // positive = owes, negative = profit
+    const sessions = new Set(txns.map(t => new Date(t.timestamp).toDateString())).size;
+    const avgBorrow = borrows.length > 0 ? totalBorrowed / borrows.length : 0;
+    const lastActive = txns.length > 0 ? txns.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))[0].timestamp : null;
+    return { name: p.name, icon: p.icon || '🎰', totalBorrowed, totalReturned, net, borrowCount: borrows.length, returnCount: returns.length, sessions, avgBorrow, lastActive };
+  });
+
+  // ── Leaderboard (sorted by net: lowest = best, they owe least / profited most) ──
+  const sorted = [...playerData].sort((a,b) => a.net - b.net);
+  const medals = ['🥇','🥈','🥉'];
+  let lbHtml = '';
+  sorted.forEach((p, i) => {
+    const rank = i < 3 ? medals[i] : `<span style="color:var(--text-muted);font-size:0.9rem">${i+1}</span>`;
+    let tag = '', tagCls = 'even';
+    if (p.net < 0) { tag = 'Winner'; tagCls = 'winner'; }
+    else if (p.net > 0) { tag = 'Losing'; tagCls = 'loser'; }
+    else { tag = 'Even'; }
+    const amtColor = p.net < 0 ? 'var(--green)' : p.net > 0 ? 'var(--red)' : 'var(--text-dim)';
+    const amtText = p.net < 0 ? `+${formatCurrency(Math.abs(p.net))}` : p.net > 0 ? `-${formatCurrency(p.net)}` : formatCurrency(0);
+    lbHtml += `<div class="leaderboard-row ${i < 3 ? 'rank-'+(i+1) : ''}">
+      <span class="lb-rank">${rank}</span>
+      <span class="lb-name">${p.icon} ${p.name}</span>
+      <span class="lb-tag ${tagCls}">${tag}</span>
+      <span class="lb-amount" style="color:${amtColor}">${amtText}</span>
+    </div>`;
+  });
+  document.getElementById('leaderboard').innerHTML = lbHtml;
+
+  // ── Player Detail Cards ──
+  let detailHtml = '';
+  playerData.forEach(p => {
+    const statusColor = p.net < 0 ? 'var(--green)' : p.net > 0 ? 'var(--red)' : 'var(--text-dim)';
+    const statusText = p.net < 0 ? `Winning ${formatCurrency(Math.abs(p.net))}` : p.net > 0 ? `Losing ${formatCurrency(p.net)}` : 'Even';
+    detailHtml += `<div class="stat-detail-card">
+      <div class="stat-detail-name">${p.icon} ${p.name} <span style="font-size:0.8rem;color:${statusColor};font-weight:600">${statusText}</span></div>
+      <div class="stat-detail-grid">
+        <div class="sd-item"><div class="sd-label">Borrowed</div><div class="sd-value" style="color:var(--red)">${formatCurrency(p.totalBorrowed)}</div></div>
+        <div class="sd-item"><div class="sd-label">Returned</div><div class="sd-value" style="color:var(--green)">${formatCurrency(p.totalReturned)}</div></div>
+        <div class="sd-item"><div class="sd-label">Net</div><div class="sd-value" style="color:${statusColor}">${p.net < 0 ? '+' : p.net > 0 ? '-' : ''}${formatCurrency(Math.abs(p.net))}</div></div>
+        <div class="sd-item"><div class="sd-label">Borrows</div><div class="sd-value">${p.borrowCount}</div></div>
+        <div class="sd-item"><div class="sd-label">Sessions</div><div class="sd-value">${p.sessions}</div></div>
+        <div class="sd-item"><div class="sd-label">Avg Borrow</div><div class="sd-value">${formatCurrency(p.avgBorrow)}</div></div>
+      </div>
+      ${p.lastActive ? `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">Last active: ${formatDateTime(p.lastActive)}</div>` : ''}
+    </div>`;
+  });
+  document.getElementById('playerStatsDetail').innerHTML = detailHtml;
+
+  // ── Club Overview ──
+  const totalBorrowed = data.transactions.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+  const totalReturned = data.transactions.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+  const totalSessions = new Set(data.transactions.map(t => new Date(t.timestamp).toDateString())).size;
+  const totalTxns = data.transactions.length;
+  const winners = playerData.filter(p => p.net < 0);
+  const losers = playerData.filter(p => p.net > 0);
+  const biggestWinner = winners.length > 0 ? winners.sort((a,b) => a.net - b.net)[0] : null;
+  const biggestLoser = losers.length > 0 ? losers.sort((a,b) => b.net - a.net)[0] : null;
+  const mostActive = [...playerData].sort((a,b) => b.borrowCount - a.borrowCount)[0];
+  const highestSingleBorrow = data.transactions.filter(t => t.type === 'borrow').sort((a,b) => b.amount - a.amount)[0];
+
+  let ovHtml = '<div class="overview-grid">';
+  ovHtml += `<div class="overview-card"><div class="ov-icon">🎲</div><div class="ov-label">Total Sessions</div><div class="ov-value">${totalSessions}</div></div>`;
+  ovHtml += `<div class="overview-card"><div class="ov-icon">🔄</div><div class="ov-label">Total Transactions</div><div class="ov-value">${totalTxns}</div></div>`;
+  ovHtml += `<div class="overview-card"><div class="ov-icon">💸</div><div class="ov-label">Total Borrowed</div><div class="ov-value" style="color:var(--red)">${formatCurrency(totalBorrowed)}</div></div>`;
+  ovHtml += `<div class="overview-card"><div class="ov-icon">💰</div><div class="ov-label">Total Returned</div><div class="ov-value" style="color:var(--green)">${formatCurrency(totalReturned)}</div></div>`;
+  if (biggestWinner) {
+    ovHtml += `<div class="overview-card"><div class="ov-icon">🏆</div><div class="ov-label">Biggest Winner</div><div class="ov-value" style="color:var(--green)">+${formatCurrency(Math.abs(biggestWinner.net))}</div><div class="ov-name">${biggestWinner.icon} ${biggestWinner.name}</div></div>`;
+  }
+  if (biggestLoser) {
+    ovHtml += `<div class="overview-card"><div class="ov-icon">📉</div><div class="ov-label">Biggest Loser</div><div class="ov-value" style="color:var(--red)">-${formatCurrency(biggestLoser.net)}</div><div class="ov-name">${biggestLoser.icon} ${biggestLoser.name}</div></div>`;
+  }
+  if (mostActive) {
+    ovHtml += `<div class="overview-card"><div class="ov-icon">🔥</div><div class="ov-label">Most Active</div><div class="ov-value">${mostActive.borrowCount} borrows</div><div class="ov-name">${mostActive.icon} ${mostActive.name}</div></div>`;
+  }
+  if (highestSingleBorrow) {
+    ovHtml += `<div class="overview-card"><div class="ov-icon">💎</div><div class="ov-label">Biggest Single Borrow</div><div class="ov-value">${formatCurrency(highestSingleBorrow.amount)}</div><div class="ov-name">${highestSingleBorrow.player}</div></div>`;
+  }
+  ovHtml += `<div class="overview-card"><div class="ov-icon">✅</div><div class="ov-label">Winners</div><div class="ov-value" style="color:var(--green)">${winners.length}</div></div>`;
+  ovHtml += `<div class="overview-card"><div class="ov-icon">❌</div><div class="ov-label">Losers</div><div class="ov-value" style="color:var(--red)">${losers.length}</div></div>`;
+  ovHtml += '</div>';
+  document.getElementById('clubOverview').innerHTML = ovHtml;
+}
+
 // ─── Admin System: Owner + Moderators (stored in data.admin → synced to cloud) ───
 const ADMIN_SESSION_KEY = 'poker_admin_session';
 let adminRole = null;
@@ -837,7 +992,7 @@ function hashPin(pin, salt) {
   }
   // Combine both hashes for uniqueness
   const combined = Math.abs(h1 ^ (h2 * 31));
-  return 'v2_' + combined.toString(36) + '_' + Math.abs(h2).toString(36);
+  return 'v3_' + combined.toString(36) + '_' + Math.abs(h2).toString(36);
 }
 
 function getOwnerPin() { return data.admin.ownerPinHash; }
@@ -871,7 +1026,7 @@ function toggleAdmin() {
   if (!hasOwner()) {
     adminPinMode = 'owner-setup';
     document.getElementById('adminPinTitle').textContent = '👑 Set Owner PIN';
-    document.getElementById('adminPinMsg').textContent = 'Create a 4-digit PIN to protect admin controls. Remember this PIN!';
+    document.getElementById('adminPinMsg').textContent = 'Create a 6-digit PIN to protect admin controls. Remember this PIN!';
     document.getElementById('pinResetOption').style.display = 'none';
   } else {
     adminPinMode = 'choose-role';
@@ -905,7 +1060,7 @@ function toggleAdmin() {
 window.startOwnerLogin = function() {
   adminPinMode = 'owner-login';
   document.getElementById('adminPinTitle').textContent = '👑 Owner PIN';
-  document.getElementById('adminPinMsg').textContent = 'Enter your 4-digit Owner PIN.';
+  document.getElementById('adminPinMsg').textContent = 'Enter your 6-digit Owner PIN.';
   document.getElementById('pinResetOption').style.display = '';
   document.querySelector('.pin-row').style.display = 'flex';
   document.querySelector('.modal-actions').style.display = 'flex';
@@ -931,7 +1086,7 @@ window.startPlayerLogin = function(name) {
   pendingModName = name;
   adminPinMode = 'player-login';
   document.getElementById('adminPinTitle').textContent = `🎰 ${name}`;
-  document.getElementById('adminPinMsg').textContent = `Enter your 4-digit PIN to view your scores.`;
+  document.getElementById('adminPinMsg').textContent = `Enter your 6-digit PIN to view your scores.`;
   document.getElementById('pinResetOption').style.display = 'none';
   document.querySelector('.pin-row').style.display = 'flex';
   document.querySelector('.modal-actions').style.display = 'flex';
@@ -952,7 +1107,7 @@ window.setupPlayerPin = function(name) {
   } else {
     adminPinMode = 'player-setup';
     document.getElementById('adminPinTitle').textContent = `🔑 Set PIN for ${name}`;
-    document.getElementById('adminPinMsg').textContent = 'Create a 4-digit PIN. You can use this to check your scores from any device.';
+    document.getElementById('adminPinMsg').textContent = 'Create a 6-digit PIN. You can use this to check your scores from any device.';
   }
   document.getElementById('pinResetOption').style.display = 'none';
   document.querySelector('.pin-row').style.display = 'flex';
@@ -981,8 +1136,8 @@ window.adminResetPlayerPin = function(name) {
 document.querySelectorAll('.pin-digit').forEach((input, idx) => {
   input.addEventListener('input', () => {
     input.value = input.value.replace(/[^0-9]/g, '');
-    if (input.value && idx < 3) document.querySelector(`.pin-digit[data-idx="${idx+1}"]`).focus();
-    if (idx === 3 && input.value) submitPin();
+    if (input.value && idx < 5) document.querySelector(`.pin-digit[data-idx="${idx+1}"]`).focus();
+    if (idx === 5 && input.value) submitPin();
   });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Backspace' && !input.value && idx > 0) document.querySelector(`.pin-digit[data-idx="${idx-1}"]`).focus();
@@ -995,7 +1150,7 @@ function getPin() { return Array.from(document.querySelectorAll('.pin-digit')).m
 
 window.submitPin = function() {
   const pin = getPin();
-  if (pin.length < 4) return;
+  if (pin.length < 6) return;
   const err = document.getElementById('pinError');
 
   if (adminPinMode === 'owner-setup') {
@@ -1003,14 +1158,14 @@ window.submitPin = function() {
     adminRole = 'owner'; adminName = 'Owner';
     sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:'Owner' }));
     logAdminAction('Owner PIN set up');
-    cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
+    cancelAdminPin(); refreshUI(); renderHistory();
     showToast('👑 Owner mode activated! You have full control.');
   } else if (adminPinMode === 'owner-login') {
     if (verifyOwnerPin(pin)) {
       adminRole = 'owner'; adminName = 'Owner';
       sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:'Owner' }));
       logAdminAction('Owner logged in');
-      cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
+      cancelAdminPin(); refreshUI(); renderHistory();
       showToast('👑 Owner mode activated!');
     } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
   } else if (adminPinMode === 'mod-login') {
@@ -1019,7 +1174,7 @@ window.submitPin = function() {
       adminRole = 'mod'; adminName = mod.name;
       sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'mod', name:mod.name }));
       logAdminAction(`Moderator "${mod.name}" logged in`);
-      cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
+      cancelAdminPin(); refreshUI(); renderHistory();
       showToast(`🛡️ Moderator mode: ${mod.name}`);
     } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
   } else if (adminPinMode === 'add-mod-pin') {
@@ -1035,7 +1190,7 @@ window.submitPin = function() {
     adminRole = 'owner'; adminName = 'Owner';
     sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:'Owner' }));
     logAdminAction('Owner PIN was reset');
-    cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
+    cancelAdminPin(); refreshUI(); renderHistory();
     showToast('👑 Owner PIN reset!');
   } else if (adminPinMode === 'player-setup') {
     const player = data.players.find(p => p.name === pendingModName);
@@ -1051,7 +1206,7 @@ window.submitPin = function() {
     if (player && player.pinHash === hashPin(pin, 'player_' + pendingModName)) {
       adminRole = 'player'; adminName = pendingModName;
       sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'player', name:pendingModName }));
-      cancelAdminPin(); updateAdminUI(); renderPlayers(); renderHistory();
+      cancelAdminPin(); refreshUI(); renderHistory();
       showToast(`🎰 Welcome, ${pendingModName}!`);
     } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
   } else if (adminPinMode === 'player-verify-before-reset') {
@@ -1059,7 +1214,7 @@ window.submitPin = function() {
     if (player && player.pinHash === hashPin(pin, 'player_' + pendingModName)) {
       adminPinMode = 'player-setup';
       document.getElementById('adminPinTitle').textContent = `🔑 New PIN for ${pendingModName}`;
-      document.getElementById('adminPinMsg').textContent = 'Enter your new 4-digit PIN.';
+      document.getElementById('adminPinMsg').textContent = 'Enter your new 6-digit PIN.';
       clearPinInputs();
       document.getElementById('pinError').textContent = '';
       setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
@@ -1080,7 +1235,7 @@ window.resetAdminPin = function() {
   if (!confirm('To reset your Owner PIN, you must set a new one. If you truly forgot it, the only option is clearing browser data.\n\nProceed to set a new PIN?')) return;
   adminPinMode = 'reset-owner';
   document.getElementById('adminPinTitle').textContent = '👑 New Owner PIN';
-  document.getElementById('adminPinMsg').textContent = 'Enter a new 4-digit Owner PIN.';
+  document.getElementById('adminPinMsg').textContent = 'Enter a new 6-digit Owner PIN.';
   document.getElementById('pinResetOption').style.display = 'none';
   clearPinInputs();
   document.getElementById('pinError').textContent = '';
@@ -1209,7 +1364,7 @@ window.addModerator = function() {
   pendingModName = sel.value;
   adminPinMode = 'add-mod-pin';
   document.getElementById('adminPinTitle').textContent = '🛡️ Set Moderator PIN';
-  document.getElementById('adminPinMsg').textContent = `Set a 4-digit PIN for ${pendingModName}. Share this PIN with them privately.`;
+  document.getElementById('adminPinMsg').textContent = `Set a 6-digit PIN for ${pendingModName}. Share this PIN with them privately.`;
   document.getElementById('pinResetOption').style.display = 'none';
   clearPinInputs();
   document.getElementById('pinError').textContent = '';
@@ -1229,6 +1384,20 @@ window.removeMod = function(index) {
   logAdminAction(`Removed moderator "${name}"`);
   renderAdminPanel();
   showToast(`${name} removed as moderator`);
+};
+
+// ─── Backup Panel ───
+window.toggleBackupPanel = function() {
+  const panel = document.getElementById('backupPanel');
+  const btn = document.getElementById('backupToggleBtn');
+  if (panel.style.display === 'none') {
+    panel.style.display = '';
+    btn.innerHTML = '💾 Hide Backup';
+    updateBackupStatus();
+  } else {
+    panel.style.display = 'none';
+    btn.innerHTML = '💾 Backup & Restore';
+  }
 };
 
 // ─── Export / Import ───
@@ -1328,8 +1497,10 @@ function applyAccessControl() {
   const addPlayerRow = document.getElementById('addPlayerRow');
   if (addPlayerRow) addPlayerRow.style.display = writeOk ? '' : 'none';
   // Hide actions tab entirely (borrows/returns — owner/mod only)
-  const actionsTab = document.querySelectorAll('.tab')[1];
-  if (actionsTab) actionsTab.style.display = writeOk ? '' : 'none';
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(t => {
+    if (t.textContent.includes('Actions')) t.style.display = writeOk ? '' : 'none';
+  });
   // Hide clear all data button
   const clearBtn = document.querySelector('.clear-all');
   if (clearBtn) clearBtn.style.display = writeOk ? '' : 'none';
