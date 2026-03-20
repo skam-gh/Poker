@@ -70,7 +70,7 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 .input-row { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
 .input-row input, .input-row select { flex:1; min-width:120px; padding:10px 14px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-size:0.9rem; font-family:inherit; outline:none; transition:border-color 0.2s; }
 .input-row input:focus, .input-row select:focus { border-color:var(--accent); }
-.input-row input[type="datetime-local"] { color-scheme:dark; }
+.input-row input[type="date"] { color-scheme:dark; }
 .input-row select { cursor:pointer; }
 .input-row select option { background:var(--bg); }
 
@@ -346,11 +346,11 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
         <input type="number" id="borrowAmount" placeholder="Amount (€)" min="1" step="1">
       </div>
       <div class="input-row">
-        <input type="datetime-local" id="borrowDate" style="color:var(--text-dim)">
+        <input type="date" id="borrowDate" style="color:var(--text-dim)">
         <button class="btn btn-outline btn-sm" onclick="document.getElementById('borrowDate').value=''" style="white-space:nowrap">Now</button>
         <button class="btn btn-danger" onclick="recordBorrow()">- Borrow</button>
       </div>
-      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">Leave date empty for current time, or pick a past date for old records.</div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">Leave empty for today, or pick a date for backdated entries.</div>
       <div id="borrowInfo" style="font-size:0.82rem;color:var(--text-dim);margin-top:4px"></div>
     </div>
     <div class="section">
@@ -360,11 +360,11 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
         <input type="number" id="returnAmount" placeholder="Amount (€)" min="1" step="1">
       </div>
       <div class="input-row">
-        <input type="datetime-local" id="returnDate" style="color:var(--text-dim)">
+        <input type="date" id="returnDate" style="color:var(--text-dim)">
         <button class="btn btn-outline btn-sm" onclick="document.getElementById('returnDate').value=''" style="white-space:nowrap">Now</button>
         <button class="btn btn-primary" onclick="recordReturn()" style="background:var(--green);color:#0c0f14">+ Return</button>
       </div>
-      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">Leave date empty for current time, or pick a past date for old records.</div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">Leave empty for today, or pick a date for backdated entries.</div>
     </div>
   </div>
 
@@ -896,7 +896,7 @@ function recordBorrow() {
   const dateVal = document.getElementById('borrowDate').value;
   if (!player) return showToast('Select a player');
   if (!amount || amount <= 0) return showToast('Enter a valid amount');
-  const timestamp = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();
+  const timestamp = dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : new Date().toISOString();
   // Only enforce daily borrow limit for today's transactions
   if (!dateVal) {
     const s = getPlayerStats(player);
@@ -919,7 +919,7 @@ function recordReturn() {
   const dateVal = document.getElementById('returnDate').value;
   if (!player) return showToast('Select a player');
   if (!amount || amount <= 0) return showToast('Enter a valid amount');
-  const timestamp = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();
+  const timestamp = dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : new Date().toISOString();
   data.transactions.push({ id: genId(), player, type:'return', amount, timestamp });
   document.getElementById('returnAmount').value = '';
   document.getElementById('returnDate').value = '';
