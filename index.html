@@ -183,6 +183,14 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 ::-webkit-scrollbar-thumb:hover { background:var(--text-muted); }
 
 /* Player table */
+.welcome-banner { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:20px; }
+.welcome-greeting { font-family:'Cinzel',serif; font-size:1.2rem; color:var(--accent); margin-bottom:12px; }
+.welcome-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(100px,1fr)); gap:8px; }
+.ws-item { text-align:center; padding:10px 8px; background:var(--bg); border-radius:var(--radius-sm); }
+.ws-item .ws-label { font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; }
+.ws-item .ws-value { font-size:1.15rem; font-weight:700; margin-top:2px; }
+
+/* Player table */
 .ptable { width:100%; border-collapse:collapse; font-size:0.85rem; }
 .ptable th { text-align:left; padding:10px 12px; color:var(--text-dim); font-weight:600; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; border-bottom:2px solid var(--border); white-space:nowrap; }
 .ptable td { padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
@@ -264,6 +272,9 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
     </div>
     <span style="font-size:0.8rem;color:var(--text-muted)" id="syncIndicator">☁️ Cloud synced</span>
   </div>
+
+  <!-- Welcome banner (shown after login) -->
+  <div id="welcomeBanner" style="display:none"></div>
 
   <!-- Stats -->
   <div class="stats-bar">
@@ -1080,7 +1091,7 @@ function toggleAdmin() {
     const playersWithPins = data.players.filter(p => p.pinHash);
     let msg = '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;max-height:320px;overflow-y:auto">';
     msg += `<div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:4px 0">Admin</div>`;
-    msg += `<button class="btn btn-primary" onclick="startOwnerLogin()" style="width:100%">👑 Owner</button>`;
+    msg += `<button class="btn btn-primary" onclick="startOwnerLogin()" style="width:100%">👑 ${data.admin.ownerName || 'Owner'}</button>`;
     mods.forEach(m => { msg += `<button class="btn btn-outline" onclick="startModLogin('${m.name.replace(/'/g,"\\'")}')" style="width:100%">🛡️ ${m.name}</button>`; });
     if (playersWithPins.length > 0) {
       msg += `<div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:8px 0 4px;border-top:1px solid var(--border);margin-top:4px">Players</div>`;
@@ -1200,18 +1211,17 @@ window.submitPin = function() {
 
   if (adminPinMode === 'owner-setup') {
     data.admin.ownerPinHash = hashPin(pin, 'owner'); saveData();
-    adminRole = 'owner'; adminName = 'Owner';
-    sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:'Owner' }));
-    logAdminAction('Owner PIN set up');
-    cancelAdminPin(); refreshUI(); renderHistory();
-    showToast('👑 Owner mode activated! You have full control.');
+    // Ask owner to link their player name
+    cancelAdminPin();
+    showOwnerNamePicker();
   } else if (adminPinMode === 'owner-login') {
     if (verifyOwnerPin(pin)) {
-      adminRole = 'owner'; adminName = 'Owner';
-      sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:'Owner' }));
-      logAdminAction('Owner logged in');
+      const ownerDisplayName = data.admin.ownerName || 'Owner';
+      adminRole = 'owner'; adminName = ownerDisplayName;
+      sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:ownerDisplayName }));
+      logAdminAction(`${ownerDisplayName} logged in as Owner`);
       cancelAdminPin(); refreshUI(); renderHistory();
-      showToast('👑 Owner mode activated!');
+      showToast(`👑 Welcome back, ${ownerDisplayName}!`);
     } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
   } else if (adminPinMode === 'mod-login') {
     const mod = getMods().find(m => m.name === pendingModName);
@@ -1220,7 +1230,7 @@ window.submitPin = function() {
       sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'mod', name:mod.name }));
       logAdminAction(`Moderator "${mod.name}" logged in`);
       cancelAdminPin(); refreshUI(); renderHistory();
-      showToast(`🛡️ Moderator mode: ${mod.name}`);
+      showToast(`🛡️ Welcome, ${mod.name}!`);
     } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
   } else if (adminPinMode === 'add-mod-pin') {
     const mods = getMods();
@@ -1232,8 +1242,9 @@ window.submitPin = function() {
     if (document.getElementById('tab-admin').style.display !== 'none') renderAdminPanel();
   } else if (adminPinMode === 'reset-owner') {
     data.admin.ownerPinHash = hashPin(pin, 'owner'); saveData();
-    adminRole = 'owner'; adminName = 'Owner';
-    sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:'Owner' }));
+    const ownerDisplayName = data.admin.ownerName || 'Owner';
+    adminRole = 'owner'; adminName = ownerDisplayName;
+    sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:ownerDisplayName }));
     logAdminAction('Owner PIN was reset');
     cancelAdminPin(); refreshUI(); renderHistory();
     showToast('👑 Owner PIN reset!');
@@ -1294,7 +1305,7 @@ function updateAdminUI() {
   const adminTab = document.getElementById('adminTabBtn');
   if (isAdminAny()) {
     toggle.classList.add('active');
-    toggle.innerHTML = isOwner() ? '👑 Owner' : '🛡️ Mod';
+    toggle.innerHTML = isOwner() ? `👑 ${adminName}` : `🛡️ ${adminName}`;
     badge.style.display = 'inline-flex';
     badge.innerHTML = isOwner() ? '👑 Owner' : '🛡️ Mod';
     badge.style.borderColor = isOwner() ? 'rgba(245,158,11,0.25)' : 'rgba(99,102,241,0.25)';
@@ -1431,6 +1442,88 @@ window.removeMod = function(index) {
   showToast(`${name} removed as moderator`);
 };
 
+// ─── Owner Name Picker ───
+function showOwnerNamePicker() {
+  const modal = document.getElementById('adminPinModal');
+  document.getElementById('adminPinTitle').textContent = '👑 What is your name?';
+  let msg = '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:4px">';
+  if (data.players.length > 0) {
+    msg += `<p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:8px">Select your player name or type a new one:</p>`;
+    data.players.forEach(p => {
+      msg += `<button class="btn btn-outline" onclick="setOwnerName('${p.name.replace(/'/g,"\\'")}')" style="width:100%">${p.icon||'🎰'} ${p.name}</button>`;
+    });
+    msg += `<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">`;
+  }
+  msg += `<input type="text" id="ownerNameInput" placeholder="Or type your name..." maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none">`;
+  msg += `<button class="btn btn-primary" onclick="setOwnerName(document.getElementById('ownerNameInput').value.trim())" style="width:100%;margin-top:6px">Confirm</button>`;
+  if (data.players.length > 0) msg += `</div>`;
+  msg += '</div>';
+  document.getElementById('adminPinMsg').innerHTML = msg;
+  document.querySelector('.pin-row').style.display = 'none';
+  document.querySelector('.modal-actions').style.display = 'none';
+  modal.classList.add('active');
+  setTimeout(() => { const inp = document.getElementById('ownerNameInput'); if(inp) inp.focus(); }, 100);
+}
+
+window.setOwnerName = function(name) {
+  if (!name) return showToast('Enter your name');
+  data.admin.ownerName = name;
+  // If name doesn't exist as a player, add them
+  if (!data.players.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+    data.players.push({ name, icon:'🎰', addedAt: new Date().toISOString() });
+  }
+  saveData();
+  adminRole = 'owner'; adminName = name;
+  sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name }));
+  logAdminAction(`Owner "${name}" set up`);
+  cancelAdminPin(); refreshUI(); renderHistory();
+  showToast(`👑 Welcome, ${name}! You have full control.`);
+};
+
+// ─── Welcome Banner ───
+function renderWelcomeBanner() {
+  const banner = document.getElementById('welcomeBanner');
+  if (!banner) return;
+  if (!isLoggedIn()) { banner.style.display = 'none'; return; }
+
+  // Determine display name and role label
+  let displayName = adminName || 'Guest';
+  let roleIcon = '🎰';
+  let roleLabel = 'Player';
+  if (isOwner()) { roleIcon = '👑'; roleLabel = 'Owner'; }
+  else if (isMod()) { roleIcon = '🛡️'; roleLabel = 'Moderator'; }
+
+  // Find matching player data
+  const player = data.players.find(p => p.name.toLowerCase() === displayName.toLowerCase());
+  let statsHtml = '';
+  if (player) {
+    const txns = data.transactions.filter(t => t.player === player.name);
+    const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+    const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+    const profit = totalReturned - totalBorrowed;
+    const sessions = new Set(txns.map(t => new Date(t.timestamp).toDateString())).size;
+    const borrowCount = txns.filter(t => t.type === 'borrow').length;
+    const profitColor = profit > 0 ? 'var(--green)' : profit < 0 ? 'var(--red)' : 'var(--text-dim)';
+    const profitText = `${profit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(profit))}`;
+    const status = profit > 0 ? '🏆 Winning' : profit < 0 ? '📉 Losing' : '⚖️ Even';
+    statsHtml = `<div class="welcome-stats">
+      <div class="ws-item"><div class="ws-label">Status</div><div class="ws-value" style="color:${profitColor};font-size:0.95rem">${status}</div></div>
+      <div class="ws-item"><div class="ws-label">Profit/Loss</div><div class="ws-value" style="color:${profitColor}">${profitText}</div></div>
+      <div class="ws-item"><div class="ws-label">Borrowed</div><div class="ws-value" style="color:var(--red)">${formatCurrency(totalBorrowed)}</div></div>
+      <div class="ws-item"><div class="ws-label">Returned</div><div class="ws-value" style="color:var(--green)">${formatCurrency(totalReturned)}</div></div>
+      <div class="ws-item"><div class="ws-label">Sessions</div><div class="ws-value">${sessions}</div></div>
+      <div class="ws-item"><div class="ws-label">Borrows</div><div class="ws-value">${borrowCount}</div></div>
+    </div>`;
+  }
+
+  banner.style.display = '';
+  banner.innerHTML = `<div class="welcome-banner">
+    <div class="welcome-greeting">${roleIcon} Welcome, ${displayName}!</div>
+    ${player ? `<div style="font-size:0.82rem;color:var(--text-dim);margin-bottom:12px">${roleLabel} · ${player.phone ? '📱 '+player.phone+' · ' : ''}${player.email ? '✉️ '+player.email : ''}</div>` : ''}
+    ${statsHtml || `<div style="color:var(--text-dim);font-size:0.85rem">No player data found for your name. Add yourself as a player to see stats here.</div>`}
+  </div>`;
+}
+
 // ─── Backup Panel ───
 window.toggleBackupPanel = function() {
   const panel = document.getElementById('backupPanel');
@@ -1532,6 +1625,7 @@ function refreshUI() {
   updateStats();
   updateBackupStatus();
   updateAdminUI();
+  renderWelcomeBanner();
   applyAccessControl();
 }
 
