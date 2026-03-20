@@ -276,6 +276,18 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
   <!-- Welcome banner (shown after login) -->
   <div id="welcomeBanner" style="display:none"></div>
 
+  <!-- Login prompt (shown when not logged in) -->
+  <div id="loginPrompt" style="display:none">
+    <div style="text-align:center;padding:60px 20px">
+      <div style="font-size:3rem;margin-bottom:16px;opacity:0.4">🔒</div>
+      <div style="font-family:'Cinzel',serif;font-size:1.2rem;color:var(--accent);margin-bottom:8px">Please log in to continue</div>
+      <p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:20px">Use the Login button above to access the Almere Poker Club dashboard.</p>
+    </div>
+  </div>
+
+  <!-- Main content (hidden until logged in) -->
+  <div id="mainContent" style="display:none">
+
   <!-- Stats -->
   <div class="stats-bar">
     <div class="stat-card"><div class="label">Players</div><div class="value" id="statPlayers">0</div></div>
@@ -408,6 +420,8 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
     </div>
     <button class="clear-all" onclick="clearAllData()">⚠ Clear All Data</button>
   </div>
+
+  </div><!-- end mainContent -->
 </div>
 
 <!-- PIN Modal -->
@@ -1722,6 +1736,11 @@ function refreshUI() {
 function applyAccessControl() {
   const writeOk = canWrite();
   const loggedIn = isLoggedIn();
+  // Show/hide main content based on login state
+  const mainContent = document.getElementById('mainContent');
+  const loginPrompt = document.getElementById('loginPrompt');
+  if (mainContent) mainContent.style.display = loggedIn ? '' : 'none';
+  if (loginPrompt) loginPrompt.style.display = loggedIn ? 'none' : '';
   // Hide add player button (owner/mod only)
   const addPlayerRow = document.getElementById('addPlayerRow');
   if (addPlayerRow) addPlayerRow.style.display = writeOk ? '' : 'none';
@@ -1736,8 +1755,6 @@ function applyAccessControl() {
   // Hide import button (export is fine — read-only)
   const importBtn = document.querySelector('[onclick*="importFile"]');
   if (importBtn) importBtn.style.display = writeOk ? '' : 'none';
-  // Login button: always visible. If no owner set up, clicking it triggers owner setup.
-  // No need to hide — toggleAdmin handles the logic.
   // Player PIN section: show only for logged-in players (not for admins, not before login)
   const pinSection = document.getElementById('playerPinSection');
   if (pinSection) pinSection.style.display = isPlayerOnly() ? '' : 'none';
