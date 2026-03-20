@@ -471,6 +471,9 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 
 <div class="toast" id="toast"></div>
 
+<!-- EmailJS SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+
 <!-- Firebase SDK via ESM CDN -->
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
@@ -488,6 +491,21 @@ import { getFirestore, doc, getDoc, setDoc, onSnapshot } from 'https://www.gstat
     appId: "1:1079793019121:web:48c752170b5345860c2150"
   };
 // ══════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════
+// 🔧 EMAILJS CONFIG — REPLACE WITH YOUR OWN VALUES
+// Sign up at https://www.emailjs.com/ (free: 200 emails/month)
+// 1. Add an email service (Gmail, Outlook, etc.)
+// 2. Create a template with variables: {{to_email}}, {{owner_name}}, {{reset_code}}
+// 3. Copy your Public Key, Service ID, and Template ID below
+// ══════════════════════════════════════════════════════════════
+const EMAILJS_PUBLIC_KEY = 'YOUR_EMAILJS_PUBLIC_KEY';
+const EMAILJS_SERVICE_ID = 'YOUR_EMAILJS_SERVICE_ID';
+const EMAILJS_TEMPLATE_ID = 'YOUR_EMAILJS_TEMPLATE_ID';
+// ══════════════════════════════════════════════════════════════
+
+// Initialize EmailJS
+try { emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY }); } catch(e) { console.warn('EmailJS init failed:', e); }
 
 const FIRESTORE_DOC = 'clubs/almere-poker-club';
 let firebaseReady = false;
@@ -713,6 +731,10 @@ window.cancelAddPlayer = function() {
 
 function removePlayer(name) {
   if (!requireAdmin()) return;
+  // Protect owner — only owner can delete themselves
+  if (data.admin.ownerName && name.toLowerCase() === data.admin.ownerName.toLowerCase() && !isOwner()) {
+    return showToast('🔒 Cannot remove the Owner.');
+  }
   if (!confirm(`Remove ${name} and all their transactions?`)) return;
   data.players = data.players.filter(p => p.name !== name);
   data.transactions = data.transactions.filter(t => t.player !== name);
@@ -771,13 +793,18 @@ function renderPlayers() {
 
     html += `<tr${rowCls}>`;
     html += `<td style="color:var(--text-muted)">${idx+1}</td>`;
-    html += `<td class="pt-name">${p.icon||'🎰'} ${p.name}${me?' <span style="color:var(--green);font-size:0.7rem">(you)</span>':''}${hasPin?' <span style="color:var(--text-muted);font-size:0.7rem">🔑</span>':''}</td>`;
+    const isOwnerPlayer = data.admin.ownerName && p.name.toLowerCase() === data.admin.ownerName.toLowerCase();
+    html += `<td class="pt-name">${p.icon||'🎰'} ${p.name}${isOwnerPlayer?' <span style="color:#f59e0b;font-size:0.7rem">👑</span>':''}${me?' <span style="color:var(--green);font-size:0.7rem">(you)</span>':''}${hasPin?' <span style="color:var(--text-muted);font-size:0.7rem">🔑</span>':''}</td>`;
     if (isAdm) html += `<td style="font-size:0.78rem;color:var(--text-muted)">${contact||'—'}</td>`;
     html += `<td style="color:var(--red)">${formatCurrency(totalBorrowed)}</td>`;
     html += `<td style="color:var(--green)">${formatCurrency(totalReturned)}</td>`;
     html += `<td class="pt-profit" style="color:${profitColor}">${profitText}</td>`;
     html += `<td>${borrowCount}</td>`;
-    if (isAdm) html += `<td class="pt-actions"><button class="btn btn-danger btn-sm" onclick="removePlayer('${p.name.replace(/'/g,"\\'")}')">✕</button></td>`;
+    if (isAdm) {
+      const isOwnerPlayer = data.admin.ownerName && p.name.toLowerCase() === data.admin.ownerName.toLowerCase();
+      const canDelete = isOwner() || !isOwnerPlayer; // Only owner can delete owner row
+      html += `<td class="pt-actions">${canDelete ? `<button class="btn btn-danger btn-sm" onclick="removePlayer('${p.name.replace(/'/g,"\\'")}')">✕</button>` : '<span style="font-size:0.7rem;color:var(--text-muted)">👑</span>'}</td>`;
+    }
     html += '</tr>';
   });
 
@@ -1188,6 +1215,10 @@ window.setupPlayerPin = function(name) {
 
 window.adminResetPlayerPin = function(name) {
   if (!isAdminAny()) return;
+  // Protect owner — only owner can reset their own PIN
+  if (data.admin.ownerName && name.toLowerCase() === data.admin.ownerName.toLowerCase() && !isOwner()) {
+    return showToast('🔒 Cannot reset the Owner\'s PIN.');
+  }
   if (!confirm(`Reset PIN for ${name}? They will need to set a new one.`)) return;
   const player = data.players.find(p => p.name === name);
   if (player) {
@@ -1263,6 +1294,34 @@ window.submitPin = function() {
     cancelAdminPin();
     showToast(`🛡️ ${pendingModName} added as moderator!`);
     if (document.getElementById('tab-admin').style.display !== 'none') renderAdminPanel();
+  } else if (adminPinMode === 'verify-reset-code') {
+    const storedCode = data.admin._resetCode;
+    const expiry = data.admin._resetExpiry;
+    if (!storedCode || !expiry || new Date() > new Date(expiry)) {
+      err.textContent = 'Code expired. Try again.';
+      delete data.admin._resetCode;
+      delete data.admin._resetExpiry;
+      saveData();
+      clearPinInputs();
+      document.querySelector('.pin-digit[data-idx="0"]').focus();
+      return;
+    }
+    if (pin === storedCode) {
+      // Code verified — clean up and proceed to set new PIN
+      delete data.admin._resetCode;
+      delete data.admin._resetExpiry;
+      saveData();
+      adminPinMode = 'reset-owner';
+      document.getElementById('adminPinTitle').textContent = '👑 Set New Owner PIN';
+      document.getElementById('adminPinMsg').textContent = 'Code verified! Enter your new 6-digit PIN.';
+      clearPinInputs();
+      document.getElementById('pinError').textContent = '';
+      setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+    } else {
+      err.textContent = 'Wrong code.';
+      clearPinInputs();
+      document.querySelector('.pin-digit[data-idx="0"]').focus();
+    }
   } else if (adminPinMode === 'reset-owner') {
     data.admin.ownerPinHash = hashPin(pin, 'owner'); saveData();
     const ownerDisplayName = data.admin.ownerName || 'Owner';
@@ -1311,15 +1370,60 @@ window.cancelAdminPin = function() {
 
 window.resetAdminPin = function() {
   cancelAdminPin();
-  if (!confirm('To reset your Owner PIN, you must set a new one. If you truly forgot it, the only option is clearing browser data.\n\nProceed to set a new PIN?')) return;
-  adminPinMode = 'reset-owner';
-  document.getElementById('adminPinTitle').textContent = '👑 New Owner PIN';
-  document.getElementById('adminPinMsg').textContent = 'Enter a new 6-digit Owner PIN.';
-  document.getElementById('pinResetOption').style.display = 'none';
-  clearPinInputs();
-  document.getElementById('pinError').textContent = '';
-  document.getElementById('adminPinModal').classList.add('active');
-  setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+  // Find owner's email
+  const ownerName = data.admin.ownerName;
+  const ownerPlayer = ownerName ? data.players.find(p => p.name.toLowerCase() === ownerName.toLowerCase()) : null;
+  const ownerEmail = ownerPlayer?.email;
+
+  if (!ownerEmail) {
+    alert('No email address found for the owner. Please contact someone with database access to reset your PIN.');
+    return;
+  }
+
+  if (!confirm(`A 6-digit reset code will be sent to:\n${ownerEmail}\n\nProceed?`)) return;
+
+  // Generate a random 6-digit code
+  const resetCode = String(Math.floor(100000 + Math.random() * 900000));
+  // Store it temporarily in data (will sync to cloud)
+  data.admin._resetCode = resetCode;
+  data.admin._resetExpiry = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 min expiry
+  saveData();
+
+  // Send email via EmailJS
+  showToast('📧 Sending reset code...');
+  try {
+    emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: ownerEmail,
+      owner_name: ownerName,
+      reset_code: resetCode
+    }).then(() => {
+      showToast('📧 Reset code sent to ' + ownerEmail);
+      // Show code entry modal
+      adminPinMode = 'verify-reset-code';
+      document.getElementById('adminPinTitle').textContent = '📧 Enter Reset Code';
+      document.getElementById('adminPinMsg').textContent = `A 6-digit code was sent to ${ownerEmail}. Enter it below (valid for 15 minutes).`;
+      document.getElementById('pinResetOption').style.display = 'none';
+      document.querySelector('.pin-row').style.display = 'flex';
+      document.querySelector('.modal-actions').style.display = 'flex';
+      clearPinInputs();
+      document.getElementById('pinError').textContent = '';
+      document.getElementById('adminPinModal').classList.add('active');
+      setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+    }).catch((err) => {
+      console.error('EmailJS failed:', err);
+      // Clean up stored code
+      delete data.admin._resetCode;
+      delete data.admin._resetExpiry;
+      saveData();
+      showToast('❌ Failed to send email. Check EmailJS config.');
+    });
+  } catch(e) {
+    console.error('EmailJS error:', e);
+    delete data.admin._resetCode;
+    delete data.admin._resetExpiry;
+    saveData();
+    showToast('❌ EmailJS not configured. Check setup guide.');
+  }
 };
 
 function updateAdminUI() {
@@ -1432,7 +1536,8 @@ function renderAdminPanel() {
   const sel = document.getElementById('addModSelect');
   if (sel) {
     const modNames = mods.map(m => m.name.toLowerCase());
-    getPlayerNames().forEach(n => { if (!modNames.includes(n.toLowerCase())) sel.innerHTML += `<option value="${n}">${n}</option>`; });
+    const ownerLower = (data.admin.ownerName || '').toLowerCase();
+    getPlayerNames().forEach(n => { if (!modNames.includes(n.toLowerCase()) && n.toLowerCase() !== ownerLower) sel.innerHTML += `<option value="${n}">${n}</option>`; });
   }
 }
 
