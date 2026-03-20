@@ -182,13 +182,18 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
 ::-webkit-scrollbar-thumb:hover { background:var(--text-muted); }
 
-/* Player table */
+/* Welcome banner */
 .welcome-banner { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:20px; }
 .welcome-greeting { font-family:'Cinzel',serif; font-size:1.2rem; color:var(--accent); margin-bottom:12px; }
 .welcome-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(100px,1fr)); gap:8px; }
 .ws-item { text-align:center; padding:10px 8px; background:var(--bg); border-radius:var(--radius-sm); }
 .ws-item .ws-label { font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; }
 .ws-item .ws-value { font-size:1.15rem; font-weight:700; margin-top:2px; }
+
+/* Settlement transfers */
+.transfer-row { display:flex; align-items:center; gap:10px; padding:12px 16px; background:var(--bg); border-radius:var(--radius-sm); margin-bottom:6px; border:1px solid var(--border); flex-wrap:wrap; }
+.transfer-arrow { color:var(--accent); font-weight:700; font-size:1.1rem; }
+.transfer-amount { font-weight:700; color:var(--accent); margin-left:auto; }
 
 /* Player table */
 .ptable { width:100%; border-collapse:collapse; font-size:0.85rem; }
@@ -390,8 +395,27 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
   <!-- Tab: Settlement -->
   <div id="tab-settlement" style="display:none">
     <div class="section">
-      <div class="section-title"><span class="icon">⚖️</span> Settlement Summary</div>
+      <div class="section-title"><span class="icon">⚖️</span> Balances</div>
       <div class="settlement-grid" id="settlementGrid"></div>
+    </div>
+    <div class="section" id="settleTransfersSection">
+      <div class="section-title"><span class="icon">🤝</span> Who Pays Whom</div>
+      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Minimum transfers needed to settle all balances.</p>
+      <div id="settleTransfers"></div>
+    </div>
+    <div class="section" id="settleActionSection" style="display:none">
+      <div class="section-title"><span class="icon">💸</span> Record Settlement</div>
+      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">When a loser pays a winner, record it here to update both balances.</p>
+      <div class="input-row">
+        <select id="settlePayer"><option value="">Who is paying...</option></select>
+        <span style="color:var(--text-dim);padding:10px 4px">→</span>
+        <select id="settleReceiver"><option value="">Who receives...</option></select>
+      </div>
+      <div class="input-row">
+        <input type="number" id="settleAmount" placeholder="Amount (€)" min="1" step="1">
+        <button class="btn btn-primary" onclick="recordSettlement()">🤝 Record Payment</button>
+      </div>
+      <div id="settlePreview" style="font-size:0.85rem;color:var(--text-dim);margin-top:4px"></div>
     </div>
   </div>
 
@@ -718,7 +742,7 @@ function addPlayer() {
   const phone = phoneInput.value.trim();
   const email = emailInput.value.trim();
   if (!name) return showToast('Enter a player name');
-  if (data.players.length >= 15) return showToast('Maximum 15 players');
+  if (data.players.length >= 25) return showToast('Maximum 25 players');
   if (data.players.find(p => p.name.toLowerCase() === name.toLowerCase())) return showToast('Player already exists');
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showToast('Invalid email format');
   data.players.push({ name, icon:'🎰', phone: phone || null, email: email || null, addedAt: new Date().toISOString() });
@@ -940,21 +964,125 @@ function deleteTransaction(id) {
 // ─── Settlement ───
 function renderSettlement() {
   const grid = document.getElementById('settlementGrid');
+  const transfersDiv = document.getElementById('settleTransfers');
+  const transfersSection = document.getElementById('settleTransfersSection');
+  const settleSection = document.getElementById('settleActionSection');
   if (data.players.length === 0) {
     grid.innerHTML = '<div class="empty"><div class="icon">⚖️</div><p>Add players and record transactions to see settlements.</p></div>';
+    if (transfersSection) transfersSection.style.display = 'none';
+    if (settleSection) settleSection.style.display = 'none';
     return;
   }
-  grid.innerHTML = data.players.map(p => {
+
+  const isAdm = isAdminAny();
+
+  // Build balances
+  const balances = data.players.map(p => {
     const s = getPlayerStats(p.name);
     const profit = s.totalReturned - s.totalBorrowed;
+    return { name: p.name, icon: p.icon || '🎰', profit };
+  });
+
+  // Render balance summary
+  grid.innerHTML = balances.map(p => {
     let cls = 'clear', label = 'Settled ✓', amtCls = 'zero';
-    if (profit > 0) { cls = 'overpaid'; label = `Won +${formatCurrency(profit)}`; amtCls = 'positive'; }
-    else if (profit < 0) { cls = 'owes'; label = `Owes ${formatCurrency(Math.abs(profit))}`; amtCls = 'negative'; }
+    if (p.profit > 0) { cls = 'overpaid'; label = `Won +${formatCurrency(p.profit)}`; amtCls = 'positive'; }
+    else if (p.profit < 0) { cls = 'owes'; label = `Owes ${formatCurrency(Math.abs(p.profit))}`; amtCls = 'negative'; }
     return `<div class="settle-row ${cls}">
-      <span class="settle-name">${p.icon || '🎰'} ${p.name}</span>
+      <span class="settle-name">${p.icon} ${p.name}</span>
       <span class="settle-amount ${amtCls}">${label}</span>
     </div>`;
   }).join('');
+
+  // Calculate minimum transfers (who pays whom)
+  const losers = balances.filter(p => p.profit < 0).map(p => ({ name: p.name, icon: p.icon, amount: Math.abs(p.profit) })).sort((a,b) => b.amount - a.amount);
+  const winners = balances.filter(p => p.profit > 0).map(p => ({ name: p.name, icon: p.icon, amount: p.profit })).sort((a,b) => b.amount - a.amount);
+  const transfers = [];
+  let li = 0, wi = 0;
+  const lCopy = losers.map(l => ({...l}));
+  const wCopy = winners.map(w => ({...w}));
+  while (li < lCopy.length && wi < wCopy.length) {
+    const amount = Math.min(lCopy[li].amount, wCopy[wi].amount);
+    if (amount > 0.01) {
+      transfers.push({ from: lCopy[li].name, fromIcon: lCopy[li].icon, to: wCopy[wi].name, toIcon: wCopy[wi].icon, amount });
+    }
+    lCopy[li].amount -= amount;
+    wCopy[wi].amount -= amount;
+    if (lCopy[li].amount < 0.01) li++;
+    if (wCopy[wi].amount < 0.01) wi++;
+  }
+
+  // Render transfers
+  if (transfersSection) {
+    if (transfers.length === 0) {
+      transfersSection.style.display = 'none';
+    } else {
+      transfersSection.style.display = '';
+      let tHtml = '';
+      transfers.forEach((t, i) => {
+        const settleBtn = isAdm ? ` <button class="btn btn-outline btn-sm" onclick="recordQuickSettlement('${t.from.replace(/'/g,"\\'")}','${t.to.replace(/'/g,"\\'")}',${t.amount.toFixed(2)})">🤝 Paid</button>` : '';
+        tHtml += `<div class="transfer-row">
+          <span style="font-weight:600;color:var(--red)">${t.fromIcon} ${t.from}</span>
+          <span class="transfer-arrow">→ pays →</span>
+          <span style="font-weight:600;color:var(--green)">${t.toIcon} ${t.to}</span>
+          <span class="transfer-amount">${formatCurrency(t.amount)}</span>
+          ${settleBtn}
+        </div>`;
+      });
+      transfersDiv.innerHTML = tHtml;
+    }
+  }
+
+  // Show record settlement section for admins
+  if (settleSection) {
+    settleSection.style.display = isAdm && transfers.length > 0 ? '' : 'none';
+    const payerSel = document.getElementById('settlePayer');
+    const receiverSel = document.getElementById('settleReceiver');
+    if (payerSel) {
+      payerSel.innerHTML = '<option value="">Who is paying...</option>';
+      losers.forEach(p => { if (p.amount > 0.01) payerSel.innerHTML += `<option value="${p.name}">${p.name} (owes ${formatCurrency(p.amount)})</option>`; });
+    }
+    if (receiverSel) {
+      receiverSel.innerHTML = '<option value="">Who receives...</option>';
+      winners.forEach(p => { if (p.amount > 0.01) receiverSel.innerHTML += `<option value="${p.name}">${p.name} (won +${formatCurrency(p.amount)})</option>`; });
+    }
+  }
+}
+
+// Quick settle from transfer row button
+window.recordQuickSettlement = function(fromName, toName, amount) {
+  if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
+  if (!confirm(`Record payment:\n\n${fromName} pays ${formatCurrency(amount)} to ${toName}\n\nThis will update both players' balances.\n\nProceed?`)) return;
+  doRecordSettlement(fromName, toName, amount);
+};
+
+// Manual settle from dropdowns
+window.recordSettlement = function() {
+  if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
+  const payer = document.getElementById('settlePayer').value;
+  const receiver = document.getElementById('settleReceiver').value;
+  const amount = parseFloat(document.getElementById('settleAmount').value);
+  if (!payer) return showToast('Select who is paying');
+  if (!receiver) return showToast('Select who receives');
+  if (payer === receiver) return showToast('Payer and receiver must be different');
+  if (!amount || amount <= 0) return showToast('Enter a valid amount');
+  if (!confirm(`Record payment:\n\n${payer} pays ${formatCurrency(amount)} to ${receiver}\n\nProceed?`)) return;
+  doRecordSettlement(payer, receiver, amount);
+  document.getElementById('settleAmount').value = '';
+};
+
+function doRecordSettlement(fromName, toName, amount) {
+  const ts = new Date().toISOString();
+  // Loser pays: record a return (they're putting money back) → reduces their debt
+  data.transactions.push({ id: genId(), player: fromName, type:'return', amount, timestamp: ts, note: `Settlement — paid to ${toName}` });
+  // Winner receives: record a borrow (they're taking money out) → reduces their winnings
+  data.transactions.push({ id: genId(), player: toName, type:'borrow', amount, timestamp: ts, note: `Settlement — received from ${fromName}` });
+  saveData();
+  logAdminAction(`Settlement: ${fromName} paid ${formatCurrency(amount)} to ${toName}`);
+  renderSettlement();
+  renderPlayers();
+  updateStats();
+  showToast(`🤝 ${fromName} paid ${formatCurrency(amount)} to ${toName}`);
 }
 
 // ─── Stats ───
@@ -986,11 +1114,22 @@ function renderStats() {
     const returns = txns.filter(t => t.type === 'return');
     const totalBorrowed = borrows.reduce((s,t) => s + t.amount, 0);
     const totalReturned = returns.reduce((s,t) => s + t.amount, 0);
-    const profit = totalReturned - totalBorrowed; // positive = won money, negative = lost money
-    const sessions = new Set(txns.map(t => new Date(t.timestamp).toDateString())).size;
+    const profit = totalReturned - totalBorrowed;
+    const sessionDates = [...new Set(txns.map(t => new Date(t.timestamp).toDateString()))];
+    const sessions = sessionDates.length;
+    // Calculate per-session wins
+    let sessionsWon = 0;
+    sessionDates.forEach(date => {
+      const dayTxns = txns.filter(t => new Date(t.timestamp).toDateString() === date);
+      const dayBorrowed = dayTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+      const dayReturned = dayTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+      if (dayReturned > dayBorrowed) sessionsWon++;
+    });
+    const winRate = sessions > 0 ? Math.round((sessionsWon / sessions) * 100) : 0;
     const avgBorrow = borrows.length > 0 ? totalBorrowed / borrows.length : 0;
+    const avgProfit = sessions > 0 ? profit / sessions : 0;
     const lastActive = txns.length > 0 ? txns.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))[0].timestamp : null;
-    return { name: p.name, icon: p.icon || '🎰', totalBorrowed, totalReturned, profit, borrowCount: borrows.length, returnCount: returns.length, sessions, avgBorrow, lastActive };
+    return { name: p.name, icon: p.icon || '🎰', totalBorrowed, totalReturned, profit, borrowCount: borrows.length, returnCount: returns.length, sessions, sessionsWon, winRate, avgBorrow, avgProfit, lastActive };
   });
 
   // ── Leaderboard (sorted by profit: highest first = best) ──
@@ -1019,15 +1158,17 @@ function renderStats() {
   playerData.forEach(p => {
     const statusColor = p.profit > 0 ? 'var(--green)' : p.profit < 0 ? 'var(--red)' : 'var(--text-dim)';
     const statusText = p.profit > 0 ? `Won +${formatCurrency(p.profit)}` : p.profit < 0 ? `Lost -${formatCurrency(Math.abs(p.profit))}` : 'Even';
+    const winRateColor = p.winRate >= 50 ? 'var(--green)' : p.winRate > 0 ? 'var(--accent)' : 'var(--text-dim)';
+    const avgProfitColor = p.avgProfit > 0 ? 'var(--green)' : p.avgProfit < 0 ? 'var(--red)' : 'var(--text-dim)';
     detailHtml += `<div class="stat-detail-card">
       <div class="stat-detail-name">${p.icon} ${p.name} <span style="font-size:0.8rem;color:${statusColor};font-weight:600">${statusText}</span></div>
       <div class="stat-detail-grid">
-        <div class="sd-item"><div class="sd-label">Borrowed</div><div class="sd-value" style="color:var(--red)">${formatCurrency(p.totalBorrowed)}</div></div>
-        <div class="sd-item"><div class="sd-label">Returned</div><div class="sd-value" style="color:var(--green)">${formatCurrency(p.totalReturned)}</div></div>
-        <div class="sd-item"><div class="sd-label">Profit/Loss</div><div class="sd-value" style="color:${statusColor}">${p.profit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(p.profit))}</div></div>
-        <div class="sd-item"><div class="sd-label">Borrows</div><div class="sd-value">${p.borrowCount}</div></div>
+        <div class="sd-item"><div class="sd-label">Total Borrowed</div><div class="sd-value" style="color:var(--red)">${formatCurrency(p.totalBorrowed)}</div></div>
+        <div class="sd-item"><div class="sd-label">Total Returned</div><div class="sd-value" style="color:var(--green)">${formatCurrency(p.totalReturned)}</div></div>
+        <div class="sd-item"><div class="sd-label">Net Profit/Loss</div><div class="sd-value" style="color:${statusColor}">${p.profit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(p.profit))}</div></div>
         <div class="sd-item"><div class="sd-label">Sessions</div><div class="sd-value">${p.sessions}</div></div>
-        <div class="sd-item"><div class="sd-label">Avg Borrow</div><div class="sd-value">${formatCurrency(p.avgBorrow)}</div></div>
+        <div class="sd-item"><div class="sd-label">Win Rate</div><div class="sd-value" style="color:${winRateColor}">${p.winRate}% <span style="font-size:0.7rem">(${p.sessionsWon}/${p.sessions})</span></div></div>
+        <div class="sd-item"><div class="sd-label">Avg/Session</div><div class="sd-value" style="color:${avgProfitColor}">${p.avgProfit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(p.avgProfit))}</div></div>
       </div>
       ${p.lastActive ? `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">Last active: ${formatDateTime(p.lastActive)}</div>` : ''}
     </div>`;
@@ -1043,25 +1184,27 @@ function renderStats() {
   const losers = playerData.filter(p => p.profit < 0);
   const biggestWinner = winners.length > 0 ? winners.sort((a,b) => b.profit - a.profit)[0] : null;
   const biggestLoser = losers.length > 0 ? losers.sort((a,b) => a.profit - b.profit)[0] : null;
-  const mostActive = [...playerData].sort((a,b) => b.borrowCount - a.borrowCount)[0];
+  const mostActive = [...playerData].sort((a,b) => b.sessions - a.sessions)[0];
   const highestSingleBorrow = data.transactions.filter(t => t.type === 'borrow').sort((a,b) => b.amount - a.amount)[0];
+  const totalChipsInPlay = totalBorrowed;
+  const avgProfitPerSession = totalSessions > 0 ? playerData.reduce((s,p) => s + Math.abs(p.profit), 0) / totalSessions : 0;
 
   let ovHtml = '<div class="overview-grid">';
   ovHtml += `<div class="overview-card"><div class="ov-icon">🎲</div><div class="ov-label">Total Sessions</div><div class="ov-value">${totalSessions}</div></div>`;
   ovHtml += `<div class="overview-card"><div class="ov-icon">🔄</div><div class="ov-label">Total Transactions</div><div class="ov-value">${totalTxns}</div></div>`;
-  ovHtml += `<div class="overview-card"><div class="ov-icon">💸</div><div class="ov-label">Total Borrowed</div><div class="ov-value" style="color:var(--red)">${formatCurrency(totalBorrowed)}</div></div>`;
+  ovHtml += `<div class="overview-card"><div class="ov-icon">🎰</div><div class="ov-label">Total Chips In Play</div><div class="ov-value">${formatCurrency(totalChipsInPlay)}</div></div>`;
   ovHtml += `<div class="overview-card"><div class="ov-icon">💰</div><div class="ov-label">Total Returned</div><div class="ov-value" style="color:var(--green)">${formatCurrency(totalReturned)}</div></div>`;
   if (biggestWinner) {
-    ovHtml += `<div class="overview-card"><div class="ov-icon">🏆</div><div class="ov-label">Biggest Winner</div><div class="ov-value" style="color:var(--green)">+${formatCurrency(biggestWinner.profit)}</div><div class="ov-name">${biggestWinner.icon} ${biggestWinner.name}</div></div>`;
+    ovHtml += `<div class="overview-card"><div class="ov-icon">🏆</div><div class="ov-label">Most Won (All Time)</div><div class="ov-value" style="color:var(--green)">+${formatCurrency(biggestWinner.profit)}</div><div class="ov-name">${biggestWinner.icon} ${biggestWinner.name}</div></div>`;
   }
   if (biggestLoser) {
-    ovHtml += `<div class="overview-card"><div class="ov-icon">📉</div><div class="ov-label">Biggest Loser</div><div class="ov-value" style="color:var(--red)">-${formatCurrency(Math.abs(biggestLoser.profit))}</div><div class="ov-name">${biggestLoser.icon} ${biggestLoser.name}</div></div>`;
+    ovHtml += `<div class="overview-card"><div class="ov-icon">📉</div><div class="ov-label">Most Lost (All Time)</div><div class="ov-value" style="color:var(--red)">-${formatCurrency(Math.abs(biggestLoser.profit))}</div><div class="ov-name">${biggestLoser.icon} ${biggestLoser.name}</div></div>`;
   }
   if (mostActive) {
-    ovHtml += `<div class="overview-card"><div class="ov-icon">🔥</div><div class="ov-label">Most Active</div><div class="ov-value">${mostActive.borrowCount} borrows</div><div class="ov-name">${mostActive.icon} ${mostActive.name}</div></div>`;
+    ovHtml += `<div class="overview-card"><div class="ov-icon">🔥</div><div class="ov-label">Most Sessions Played</div><div class="ov-value">${mostActive.sessions} sessions</div><div class="ov-name">${mostActive.icon} ${mostActive.name}</div></div>`;
   }
   if (highestSingleBorrow) {
-    ovHtml += `<div class="overview-card"><div class="ov-icon">💎</div><div class="ov-label">Biggest Single Borrow</div><div class="ov-value">${formatCurrency(highestSingleBorrow.amount)}</div><div class="ov-name">${highestSingleBorrow.player}</div></div>`;
+    ovHtml += `<div class="overview-card"><div class="ov-icon">💎</div><div class="ov-label">Biggest Single Buy-in</div><div class="ov-value">${formatCurrency(highestSingleBorrow.amount)}</div><div class="ov-name">${highestSingleBorrow.player}</div></div>`;
   }
   ovHtml += `<div class="overview-card"><div class="ov-icon">✅</div><div class="ov-label">Winners</div><div class="ov-value" style="color:var(--green)">${winners.length}</div></div>`;
   ovHtml += `<div class="overview-card"><div class="ov-icon">❌</div><div class="ov-label">Losers</div><div class="ov-value" style="color:var(--red)">${losers.length}</div></div>`;
