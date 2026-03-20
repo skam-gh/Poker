@@ -353,15 +353,16 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
         <span><span class="icon">💰</span> Quick Entry</span>
         <div style="display:flex;align-items:center;gap:6px">
           <label style="font-size:0.8rem;color:var(--text-dim)">Date:</label>
-          <input type="date" id="bulkDate" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.82rem;font-family:inherit;color-scheme:dark">
-          <button class="btn btn-outline btn-sm" onclick="document.getElementById('bulkDate').value=''">Today</button>
+          <input type="date" id="bulkDate" onchange="renderBulkEntry()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.82rem;font-family:inherit;color-scheme:dark">
+          <button class="btn btn-outline btn-sm" onclick="document.getElementById('bulkDate').value='';renderBulkEntry()">Today</button>
         </div>
       </div>
-      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px">Enter borrow and return amounts for each player. Leave empty to skip. Click Save to record all at once.</p>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px">Enter amounts, then click <strong>Record Borrows</strong> (buy-in) or <strong>Record Returns</strong> (cash-out).</p>
       <div style="overflow-x:auto" id="bulkEntryWrap"></div>
-      <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn btn-outline" onclick="clearBulkInputs()">Clear All</button>
-        <button class="btn btn-primary" onclick="saveBulkEntries()" style="padding:12px 28px;font-size:0.95rem">💾 Save All Entries</button>
+      <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        <button class="btn btn-outline" onclick="clearBulkInputs()">Clear</button>
+        <button class="btn btn-danger" onclick="saveBulkAs('borrow')" style="padding:12px 22px">💸 Record Borrows</button>
+        <button class="btn btn-primary" onclick="saveBulkAs('return')" style="padding:12px 22px;background:var(--green);color:#0c0f14">💰 Record Returns</button>
       </div>
     </div>
   </div>
@@ -580,13 +581,15 @@ const STORAGE_KEY = 'poker_tracker_v3';
 const APP_VERSION = '3.0';
 
 function defaultData() {
-  return { version: APP_VERSION, createdAt: new Date().toISOString(), players: [], transactions: [], admin: { ownerPinHash: null, mods: [], auditLog: [] } };
+  return { version: APP_VERSION, createdAt: new Date().toISOString(), players: [], transactions: [], settings: { borrowLimit: 1 }, admin: { ownerPinHash: null, mods: [], auditLog: [] } };
 }
 
 function ensureAdmin(d) {
   if (!d.admin) d.admin = { ownerPinHash: null, mods: [], auditLog: [] };
   if (!d.admin.mods) d.admin.mods = [];
   if (!d.admin.auditLog) d.admin.auditLog = [];
+  if (!d.settings) d.settings = {};
+  if (d.settings.borrowLimit === undefined) d.settings.borrowLimit = 1;
   // Clean up any old localStorage keys from previous versions
   localStorage.removeItem('poker_owner_pin');
   localStorage.removeItem('poker_moderators');
@@ -712,6 +715,7 @@ function formatDateTime(iso) {
 }
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function getBorrowLimit() { return (data.settings && data.settings.borrowLimit) || 1; }
 
 // ─── Tabs ───
 const ALL_TABS = ['players','actions','history','settlement','stats','admin'];
@@ -880,63 +884,97 @@ function renderBulkEntry() {
     wrap.innerHTML = '<div class="empty"><div class="icon">💰</div><p>Add players first to record transactions.</p></div>';
     return;
   }
+
+  const dateVal = document.getElementById('bulkDate')?.value;
+  const filterDate = dateVal ? new Date(dateVal).toDateString() : new Date().toDateString();
+  const isToday = !dateVal || filterDate === new Date().toDateString();
+  const dayHasData = data.transactions.some(t => new Date(t.timestamp).toDateString() === filterDate);
+
   let html = '<table class="bulk-table"><thead><tr>';
-  html += '<th>#</th><th>Player</th><th style="text-align:right">Borrow (€)</th><th style="text-align:right">Return (€)</th><th style="text-align:right;font-size:0.7rem">Current P/L</th>';
+  html += '<th>#</th><th>Player</th>';
+  html += '<th style="text-align:center;font-size:0.7rem">Borrows</th>';
+  if (dayHasData) {
+    html += '<th style="text-align:right;font-size:0.7rem">Borrowed</th>';
+    html += '<th style="text-align:right;font-size:0.7rem">Returned</th>';
+    html += '<th style="text-align:right;font-size:0.7rem">P/L</th>';
+  }
+  html += '<th style="text-align:right">Amount (€)</th>';
   html += '</tr></thead><tbody>';
+
+  let totalDayBorrowed = 0, totalDayReturned = 0;
+
   data.players.forEach((p, idx) => {
-    const s = getPlayerStats(p.name);
-    const profit = s.totalReturned - s.totalBorrowed;
-    const profitColor = profit > 0 ? 'var(--green)' : profit < 0 ? 'var(--red)' : 'var(--text-dim)';
-    const profitText = `${profit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(profit))}`;
+    const dayTxns = data.transactions.filter(t => t.player === p.name && new Date(t.timestamp).toDateString() === filterDate);
+    const dayBorrowCount = dayTxns.filter(t => t.type === 'borrow').length;
+    const dayBorrowed = dayTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+    const dayReturned = dayTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+    const dayProfit = dayReturned - dayBorrowed;
+    const profitColor = dayProfit > 0 ? 'var(--green)' : dayProfit < 0 ? 'var(--red)' : 'var(--text-muted)';
+    const profitText = dayProfit !== 0 ? `${dayProfit > 0 ? '+' : '-'}${formatCurrency(Math.abs(dayProfit))}` : '—';
+    totalDayBorrowed += dayBorrowed;
+    totalDayReturned += dayReturned;
+
     html += `<tr>
       <td style="color:var(--text-muted)">${idx+1}</td>
       <td class="bt-name">${p.icon||'🎰'} ${p.name}</td>
-      <td><input type="number" id="bulk-borrow-${idx}" placeholder="0" min="0" step="1" tabindex="${idx*2+1}"></td>
-      <td><input type="number" id="bulk-return-${idx}" placeholder="0" min="0" step="1" tabindex="${idx*2+2}"></td>
-      <td class="bt-profit" style="color:${profitColor};text-align:right">${profitText}</td>
+      <td style="text-align:center;font-weight:600">${dayBorrowCount}</td>`;
+    if (dayHasData) {
+      html += `<td style="text-align:right;color:${dayBorrowed > 0 ? 'var(--red)' : 'var(--text-muted)'}">${dayBorrowed > 0 ? formatCurrency(dayBorrowed) : '—'}</td>`;
+      html += `<td style="text-align:right;color:${dayReturned > 0 ? 'var(--green)' : 'var(--text-muted)'}">${dayReturned > 0 ? formatCurrency(dayReturned) : '—'}</td>`;
+      html += `<td style="text-align:right;color:${profitColor};font-weight:600">${profitText}</td>`;
+    }
+    html += `<td><input type="number" id="bulk-amt-${idx}" placeholder="—" min="0" step="1" tabindex="${idx+1}"></td>
     </tr>`;
   });
+
+  if (dayHasData) {
+    const totalProfit = totalDayReturned - totalDayBorrowed;
+    const totalProfitColor = totalProfit > 0 ? 'var(--green)' : totalProfit < 0 ? 'var(--red)' : 'var(--text-muted)';
+    html += `<tr style="border-top:2px solid var(--border)">
+      <td></td><td style="font-weight:700;color:var(--text-dim)">TOTAL</td><td></td>
+      <td style="text-align:right;font-weight:700;color:var(--red)">${totalDayBorrowed > 0 ? formatCurrency(totalDayBorrowed) : '—'}</td>
+      <td style="text-align:right;font-weight:700;color:var(--green)">${totalDayReturned > 0 ? formatCurrency(totalDayReturned) : '—'}</td>
+      <td style="text-align:right;font-weight:700;color:${totalProfitColor}">${totalProfit !== 0 ? `${totalProfit > 0 ? '+' : '-'}${formatCurrency(Math.abs(totalProfit))}` : '—'}</td>
+      <td></td>
+    </tr>`;
+  }
+
   html += '</tbody></table>';
+  if (!isToday) {
+    html += `<div style="text-align:center;margin-top:8px;font-size:0.78rem;color:var(--text-muted)">Showing data for ${new Date(dateVal).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}</div>`;
+  }
   wrap.innerHTML = html;
 }
 
 window.clearBulkInputs = function() {
   data.players.forEach((p, idx) => {
-    const b = document.getElementById('bulk-borrow-' + idx);
-    const r = document.getElementById('bulk-return-' + idx);
-    if (b) b.value = '';
-    if (r) r.value = '';
+    const inp = document.getElementById('bulk-amt-' + idx);
+    if (inp) inp.value = '';
   });
-  document.getElementById('bulkDate').value = '';
-  showToast('Inputs cleared');
+  showToast('Cleared');
 };
 
-window.saveBulkEntries = function() {
+window.saveBulkAs = function(type) {
   if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
   const dateVal = document.getElementById('bulkDate').value;
   const timestamp = dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : new Date().toISOString();
+  const label = type === 'borrow' ? 'Borrow' : 'Return';
   let count = 0;
   let errors = [];
 
   data.players.forEach((p, idx) => {
-    const bInput = document.getElementById('bulk-borrow-' + idx);
-    const rInput = document.getElementById('bulk-return-' + idx);
-    const borrow = parseFloat(bInput?.value) || 0;
-    const ret = parseFloat(rInput?.value) || 0;
+    const inp = document.getElementById('bulk-amt-' + idx);
+    const amount = parseFloat(inp?.value) || 0;
+    if (amount <= 0) return;
 
-    if (borrow > 0) {
-      // Check daily borrow limit only for today
-      if (!dateVal) {
-        const s = getPlayerStats(p.name);
-        if (s.todayBorrows >= 10) { errors.push(`${p.name}: max 10 borrows/day`); return; }
-      }
-      data.transactions.push({ id: genId(), player: p.name, type:'borrow', amount: borrow, timestamp });
-      count++;
+    if (type === 'borrow' && !dateVal) {
+      const dayTxns = data.transactions.filter(t => t.player === p.name && new Date(t.timestamp).toDateString() === new Date().toDateString());
+      const dayBorrowCount = dayTxns.filter(t => t.type === 'borrow').length;
+      if (dayBorrowCount >= getBorrowLimit()) { errors.push(`${p.name}: limit reached`); return; }
     }
-    if (ret > 0) {
-      data.transactions.push({ id: genId(), player: p.name, type:'return', amount: ret, timestamp });
-      count++;
-    }
+
+    data.transactions.push({ id: genId(), player: p.name, type, amount, timestamp });
+    count++;
   });
 
   if (count === 0 && errors.length === 0) return showToast('No amounts entered');
@@ -946,8 +984,8 @@ window.saveBulkEntries = function() {
   renderPlayers();
   renderBulkEntry();
   const dateLabel = dateVal ? ' (backdated)' : '';
-  if (errors.length > 0) showToast(`⚠️ ${errors.join(', ')}`);
-  else showToast(`💾 Saved ${count} entries${dateLabel}`);
+  if (errors.length > 0) showToast(`⚠️ Saved ${count}, skipped: ${errors.join(', ')}`);
+  else showToast(`💾 ${count} ${label.toLowerCase()}s recorded${dateLabel}`);
 };
 
 // ─── History ───
@@ -1692,7 +1730,23 @@ function renderAdminPanel() {
   }
   const mods = getMods();
   const log = getAuditLog().reverse().slice(0, 50);
-  let html = '<div style="margin-bottom:24px">';
+  let html = '';
+
+  // Settings section
+  html += '<div style="margin-bottom:24px">';
+  html += '<div class="section-title" style="margin-bottom:12px"><span class="icon">⚙️</span> Settings</div>';
+  html += `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
+    <div style="flex:1"><strong>Daily Borrow Limit</strong><br><span style="font-size:0.8rem;color:var(--text-dim)">Max borrows per player per day (1-10). Default is 1.</span></div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <button class="btn btn-outline btn-sm" onclick="changeBorrowLimit(-1)">−</button>
+      <span id="borrowLimitDisplay" style="font-size:1.2rem;font-weight:700;min-width:30px;text-align:center;color:var(--accent)">${getBorrowLimit()}</span>
+      <button class="btn btn-outline btn-sm" onclick="changeBorrowLimit(1)">+</button>
+    </div>
+  </div>`;
+  html += '</div>';
+
+  // Moderators section
+  html += '<div style="margin-bottom:24px">';
   html += '<div class="section-title" style="margin-bottom:12px"><span class="icon">🛡️</span> Moderators (' + mods.length + '/3)</div>';
   if (mods.length === 0) {
     html += '<p style="color:var(--text-dim);font-size:0.9rem">No moderators yet. Add up to 3 players as moderators.</p>';
@@ -1771,6 +1825,18 @@ window.addModerator = function() {
   document.querySelector('.modal-actions').style.display = 'flex';
   document.getElementById('adminPinModal').classList.add('active');
   setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+};
+
+window.changeBorrowLimit = function(delta) {
+  if (!isAdminAny()) return showToast('🔒 Admin access required');
+  if (!data.settings) data.settings = { borrowLimit: 1 };
+  const newVal = Math.max(1, Math.min(10, getBorrowLimit() + delta));
+  data.settings.borrowLimit = newVal;
+  saveData();
+  const display = document.getElementById('borrowLimitDisplay');
+  if (display) display.textContent = newVal;
+  logAdminAction(`Changed daily borrow limit to ${newVal}`);
+  showToast(`Borrow limit set to ${newVal} per player/day`);
 };
 
 window.removeMod = function(index) {
