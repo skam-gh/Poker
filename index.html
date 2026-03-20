@@ -776,13 +776,15 @@ function removePlayer(name) {
     return showToast('🔒 Cannot remove the Owner.');
   }
   if (!confirm(`Remove ${name} and all their transactions?`)) return;
-  data.players = data.players.filter(p => p.name !== name);
-  data.transactions = data.transactions.filter(t => t.player !== name);
-  saveData();
-  renderPlayers();
-  updateStats();
-  logAdminAction(`Removed player "${name}"`);
-  showToast(`${name} removed`);
+  requirePinConfirm('Confirm Remove Player', () => {
+    data.players = data.players.filter(p => p.name !== name);
+    data.transactions = data.transactions.filter(t => t.player !== name);
+    saveData();
+    renderPlayers();
+    updateStats();
+    logAdminAction(`Removed player "${name}"`);
+    showToast(`${name} removed`);
+  });
 }
 
 function getPlayerStats(name) {
@@ -1009,14 +1011,16 @@ function renderHistory() {
 function deleteTransaction(id) {
   if (!requireAdmin()) return;
   if (!confirm('Delete this transaction?')) return;
-  const t = data.transactions.find(x => x.id === id);
-  data.transactions = data.transactions.filter(x => x.id !== id);
-  saveData();
-  renderHistory();
-  renderPlayers();
-  updateStats();
-  if (t) logAdminAction(`Deleted ${t.type} of ${formatCurrency(t.amount)} by ${t.player}`);
-  showToast('Transaction deleted');
+  requirePinConfirm('Confirm Delete Transaction', () => {
+    const t = data.transactions.find(x => x.id === id);
+    data.transactions = data.transactions.filter(x => x.id !== id);
+    saveData();
+    renderHistory();
+    renderPlayers();
+    updateStats();
+    if (t) logAdminAction(`Deleted ${t.type} of ${formatCurrency(t.amount)} by ${t.player}`);
+    showToast('Transaction deleted');
+  });
 }
 
 // ─── Settlement ───
@@ -1276,6 +1280,22 @@ let adminRole = null;
 let adminName = null;
 let adminPinMode = null;
 let pendingModName = '';
+let pendingDestructiveAction = null;
+
+// Require PIN re-entry for destructive actions
+function requirePinConfirm(title, callback) {
+  pendingDestructiveAction = callback;
+  adminPinMode = 'confirm-destructive';
+  document.getElementById('adminPinTitle').textContent = '🔐 ' + title;
+  document.getElementById('adminPinMsg').textContent = 'Re-enter your PIN to confirm this action.';
+  document.getElementById('pinResetOption').style.display = 'none';
+  document.querySelector('.pin-row').style.display = 'flex';
+  document.querySelector('.modal-actions').style.display = 'flex';
+  clearPinInputs();
+  document.getElementById('pinError').textContent = '';
+  document.getElementById('adminPinModal').classList.add('active');
+  setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+}
 
 function hashPin(pin, salt) {
   // Stronger hash using multiple rounds and full string processing
@@ -1610,11 +1630,32 @@ window.submitPin = function() {
       document.getElementById('pinError').textContent = '';
       setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
     } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
+  } else if (adminPinMode === 'confirm-destructive') {
+    // Verify current user's PIN
+    let verified = false;
+    if (isOwner()) {
+      verified = verifyOwnerPin(pin);
+    } else if (isMod()) {
+      const mod = getMods().find(m => m.name === adminName);
+      verified = mod && hashPin(pin, mod.name) === mod.pinHash;
+    }
+    if (verified && pendingDestructiveAction) {
+      const action = pendingDestructiveAction;
+      pendingDestructiveAction = null;
+      cancelAdminPin();
+      action();
+    } else {
+      pendingDestructiveAction = null;
+      err.textContent = 'Wrong PIN.';
+      clearPinInputs();
+      document.querySelector('.pin-digit[data-idx="0"]').focus();
+    }
   }
 };
 
 window.cancelAdminPin = function() {
   adminPinMode = null; pendingModName = '';
+  pendingDestructiveAction = null;
   clearPinInputs();
   document.querySelector('.pin-row').style.display = 'flex';
   document.querySelector('.modal-actions').style.display = 'flex';
@@ -1983,11 +2024,13 @@ window.clearAllData = function() {
   if (!requireOwner()) return;
   if (!confirm('This will permanently delete ALL players and transactions. Are you sure?')) return;
   if (!confirm('Really? This cannot be undone! (Tip: export a backup first)')) return;
-  data = defaultData();
-  saveData();
-  logAdminAction('Wiped all data');
-  refreshUI();
-  showToast('All data cleared');
+  requirePinConfirm('Confirm Wipe All Data', () => {
+    data = defaultData();
+    saveData();
+    logAdminAction('Wiped all data');
+    refreshUI();
+    showToast('All data cleared');
+  });
 };
 
 // ─── Refresh UI ───
