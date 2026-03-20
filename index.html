@@ -1121,12 +1121,16 @@ function toggleAdmin() {
     return;
   }
   if (!hasOwner()) {
-    // Show combined name + PIN setup
+    // Show combined name + phone + email + PIN setup
     adminPinMode = 'owner-setup-name';
     document.getElementById('adminPinTitle').textContent = '👑 Owner Setup';
     document.getElementById('adminPinMsg').innerHTML = `<div style="text-align:left">
       <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Your Name <span style="color:var(--red)">*</span></label>
-      <input type="text" id="ownerSetupName" placeholder="e.g. Srikanth" maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter')document.querySelector('.pin-digit[data-idx=\\'0\\']').focus()">
+      <input type="text" id="ownerSetupName" placeholder="e.g. Srikanth" maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter')document.getElementById('ownerSetupPhone').focus()">
+      <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Phone <span style="color:var(--text-muted)">(optional)</span></label>
+      <input type="tel" id="ownerSetupPhone" placeholder="+31 6 1234 5678" maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter')document.getElementById('ownerSetupEmail').focus()">
+      <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Email <span style="color:var(--text-muted)">(optional — used for PIN reset)</span></label>
+      <input type="email" id="ownerSetupEmail" placeholder="you@email.com" maxlength="50" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter')document.querySelector('.pin-digit[data-idx=\\'0\\']').focus()">
       <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:6px">Set a 6-digit PIN</label>
     </div>`;
     document.getElementById('pinResetOption').style.display = 'none';
@@ -1141,14 +1145,26 @@ function toggleAdmin() {
     adminPinMode = 'choose-role';
     document.getElementById('adminPinTitle').textContent = '🔐 Login As';
     const mods = getMods();
-    const playersWithPins = data.players.filter(p => p.pinHash);
+    const ownerLower = (data.admin.ownerName || '').toLowerCase();
+    const modNames = mods.map(m => m.name.toLowerCase());
+    // All players except owner and moderators (they have their own buttons above)
+    const allPlayers = data.players.filter(p => 
+      p.name.toLowerCase() !== ownerLower && !modNames.includes(p.name.toLowerCase())
+    );
     let msg = '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;max-height:320px;overflow-y:auto">';
     msg += `<div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:4px 0">Admin</div>`;
     msg += `<button class="btn btn-primary" onclick="startOwnerLogin()" style="width:100%">👑 ${data.admin.ownerName || 'Owner'}</button>`;
     mods.forEach(m => { msg += `<button class="btn btn-outline" onclick="startModLogin('${m.name.replace(/'/g,"\\'")}')" style="width:100%">🛡️ ${m.name}</button>`; });
-    if (playersWithPins.length > 0) {
+    if (allPlayers.length > 0) {
       msg += `<div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:8px 0 4px;border-top:1px solid var(--border);margin-top:4px">Players</div>`;
-      playersWithPins.forEach(p => { msg += `<button class="btn btn-outline" onclick="startPlayerLogin('${p.name.replace(/'/g,"\\'")}')" style="width:100%">🎰 ${p.name}</button>`; });
+      allPlayers.forEach(p => {
+        const hasPin = !!p.pinHash;
+        const label = hasPin ? `🎰 ${p.name}` : `🎰 ${p.name} <span style="font-size:0.7rem;color:var(--text-muted)">(set PIN)</span>`;
+        const action = hasPin 
+          ? `startPlayerLogin('${p.name.replace(/'/g,"\\'")}')`
+          : `cancelAdminPin(); setupPlayerPin('${p.name.replace(/'/g,"\\'")}')`;
+        msg += `<button class="btn btn-outline" onclick="${action}" style="width:100%;text-align:left">${label}</button>`;
+      });
     }
     msg += '</div>';
     document.getElementById('adminPinMsg').innerHTML = msg;
@@ -1215,8 +1231,14 @@ window.setupPlayerPin = function(name) {
     document.getElementById('adminPinMsg').textContent = 'Enter your current PIN to change it.';
   } else {
     adminPinMode = 'player-setup';
-    document.getElementById('adminPinTitle').textContent = `🔑 Set PIN for ${name}`;
-    document.getElementById('adminPinMsg').textContent = 'Create a 6-digit PIN. You can use this to check your scores from any device.';
+    document.getElementById('adminPinTitle').textContent = `🔑 Setup for ${name}`;
+    document.getElementById('adminPinMsg').innerHTML = `<div style="text-align:left">
+      <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Phone <span style="color:var(--text-muted)">(optional)</span></label>
+      <input type="tel" id="playerSetupPhone" placeholder="+31 6 1234 5678" maxlength="20" value="${player?.phone||''}" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter')document.getElementById('playerSetupEmail').focus()">
+      <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Email <span style="color:var(--text-muted)">(optional)</span></label>
+      <input type="email" id="playerSetupEmail" placeholder="you@email.com" maxlength="50" value="${player?.email||''}" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter')document.querySelector('.pin-digit[data-idx=\\'0\\']').focus()">
+      <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:6px">Set a 6-digit PIN</label>
+    </div>`;
   }
   document.getElementById('pinResetOption').style.display = 'none';
   document.querySelector('.pin-row').style.display = 'flex';
@@ -1268,14 +1290,23 @@ window.submitPin = function() {
 
   if (adminPinMode === 'owner-setup-name') {
     const nameInput = document.getElementById('ownerSetupName');
+    const phoneInput = document.getElementById('ownerSetupPhone');
+    const emailInput = document.getElementById('ownerSetupEmail');
     const name = nameInput ? nameInput.value.trim() : '';
+    const phone = phoneInput ? phoneInput.value.trim() : '';
+    const email = emailInput ? emailInput.value.trim() : '';
     if (!name) { document.getElementById('pinError').textContent = 'Enter your name first.'; nameInput && nameInput.focus(); return; }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { document.getElementById('pinError').textContent = 'Invalid email format.'; emailInput && emailInput.focus(); return; }
     data.admin.ownerPinHash = hashPin(pin, 'owner');
     data.admin.ownerName = name;
-    // Add as first player if not exists
-    if (!data.players.find(p => p.name.toLowerCase() === name.toLowerCase())) {
-      data.players.push({ name, icon:'🎰', addedAt: new Date().toISOString() });
+    // Add as first player if not exists, or update existing
+    let player = data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
+    if (!player) {
+      player = { name, icon:'🎰', addedAt: new Date().toISOString() };
+      data.players.push(player);
     }
+    if (phone) player.phone = phone;
+    if (email) player.email = email;
     saveData();
     adminRole = 'owner'; adminName = name;
     sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name }));
@@ -1347,7 +1378,14 @@ window.submitPin = function() {
   } else if (adminPinMode === 'player-setup') {
     const player = data.players.find(p => p.name === pendingModName);
     if (player) {
+      const phoneInput = document.getElementById('playerSetupPhone');
+      const emailInput = document.getElementById('playerSetupEmail');
+      const phone = phoneInput ? phoneInput.value.trim() : '';
+      const email = emailInput ? emailInput.value.trim() : '';
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { document.getElementById('pinError').textContent = 'Invalid email format.'; emailInput && emailInput.focus(); return; }
       player.pinHash = hashPin(pin, 'player_' + pendingModName);
+      if (phone) player.phone = phone;
+      if (email) player.email = email;
       saveData();
       cancelAdminPin();
       renderPlayers();
