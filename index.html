@@ -1080,10 +1080,22 @@ function toggleAdmin() {
     return;
   }
   if (!hasOwner()) {
-    adminPinMode = 'owner-setup';
-    document.getElementById('adminPinTitle').textContent = '👑 Set Owner PIN';
-    document.getElementById('adminPinMsg').textContent = 'Create a 6-digit PIN to protect admin controls. Remember this PIN!';
+    // Show combined name + PIN setup
+    adminPinMode = 'owner-setup-name';
+    document.getElementById('adminPinTitle').textContent = '👑 Owner Setup';
+    document.getElementById('adminPinMsg').innerHTML = `<div style="text-align:left">
+      <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Your Name <span style="color:var(--red)">*</span></label>
+      <input type="text" id="ownerSetupName" placeholder="e.g. Srikanth" maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter')document.querySelector('.pin-digit[data-idx=\\'0\\']').focus()">
+      <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:6px">Set a 6-digit PIN</label>
+    </div>`;
     document.getElementById('pinResetOption').style.display = 'none';
+    document.querySelector('.pin-row').style.display = 'flex';
+    document.querySelector('.modal-actions').style.display = 'flex';
+    clearPinInputs();
+    document.getElementById('pinError').textContent = '';
+    document.getElementById('adminPinModal').classList.add('active');
+    setTimeout(() => document.getElementById('ownerSetupName').focus(), 100);
+    return;
   } else {
     adminPinMode = 'choose-role';
     document.getElementById('adminPinTitle').textContent = '🔐 Login As';
@@ -1209,11 +1221,22 @@ window.submitPin = function() {
   if (pin.length < 6) return;
   const err = document.getElementById('pinError');
 
-  if (adminPinMode === 'owner-setup') {
-    data.admin.ownerPinHash = hashPin(pin, 'owner'); saveData();
-    // Ask owner to link their player name
-    cancelAdminPin();
-    showOwnerNamePicker();
+  if (adminPinMode === 'owner-setup-name') {
+    const nameInput = document.getElementById('ownerSetupName');
+    const name = nameInput ? nameInput.value.trim() : '';
+    if (!name) { document.getElementById('pinError').textContent = 'Enter your name first.'; nameInput && nameInput.focus(); return; }
+    data.admin.ownerPinHash = hashPin(pin, 'owner');
+    data.admin.ownerName = name;
+    // Add as first player if not exists
+    if (!data.players.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+      data.players.push({ name, icon:'🎰', addedAt: new Date().toISOString() });
+    }
+    saveData();
+    adminRole = 'owner'; adminName = name;
+    sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name }));
+    logAdminAction(`Owner "${name}" set up`);
+    cancelAdminPin(); refreshUI(); renderHistory();
+    showToast(`👑 Welcome, ${name}! You have full control.`);
   } else if (adminPinMode === 'owner-login') {
     if (verifyOwnerPin(pin)) {
       const ownerDisplayName = data.admin.ownerName || 'Owner';
@@ -1440,44 +1463,6 @@ window.removeMod = function(index) {
   logAdminAction(`Removed moderator "${name}"`);
   renderAdminPanel();
   showToast(`${name} removed as moderator`);
-};
-
-// ─── Owner Name Picker ───
-function showOwnerNamePicker() {
-  const modal = document.getElementById('adminPinModal');
-  document.getElementById('adminPinTitle').textContent = '👑 What is your name?';
-  let msg = '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:4px">';
-  if (data.players.length > 0) {
-    msg += `<p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:8px">Select your player name or type a new one:</p>`;
-    data.players.forEach(p => {
-      msg += `<button class="btn btn-outline" onclick="setOwnerName('${p.name.replace(/'/g,"\\'")}')" style="width:100%">${p.icon||'🎰'} ${p.name}</button>`;
-    });
-    msg += `<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">`;
-  }
-  msg += `<input type="text" id="ownerNameInput" placeholder="Or type your name..." maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none">`;
-  msg += `<button class="btn btn-primary" onclick="setOwnerName(document.getElementById('ownerNameInput').value.trim())" style="width:100%;margin-top:6px">Confirm</button>`;
-  if (data.players.length > 0) msg += `</div>`;
-  msg += '</div>';
-  document.getElementById('adminPinMsg').innerHTML = msg;
-  document.querySelector('.pin-row').style.display = 'none';
-  document.querySelector('.modal-actions').style.display = 'none';
-  modal.classList.add('active');
-  setTimeout(() => { const inp = document.getElementById('ownerNameInput'); if(inp) inp.focus(); }, 100);
-}
-
-window.setOwnerName = function(name) {
-  if (!name) return showToast('Enter your name');
-  data.admin.ownerName = name;
-  // If name doesn't exist as a player, add them
-  if (!data.players.find(p => p.name.toLowerCase() === name.toLowerCase())) {
-    data.players.push({ name, icon:'🎰', addedAt: new Date().toISOString() });
-  }
-  saveData();
-  adminRole = 'owner'; adminName = name;
-  sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name }));
-  logAdminAction(`Owner "${name}" set up`);
-  cancelAdminPin(); refreshUI(); renderHistory();
-  showToast(`👑 Welcome, ${name}! You have full control.`);
 };
 
 // ─── Welcome Banner ───
