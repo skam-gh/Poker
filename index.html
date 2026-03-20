@@ -196,6 +196,15 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 .transfer-amount { font-weight:700; color:var(--accent); margin-left:auto; }
 
 /* Player table */
+.bulk-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+.bulk-table th { text-align:left; padding:10px 12px; color:var(--text-dim); font-weight:600; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; border-bottom:2px solid var(--border); white-space:nowrap; }
+.bulk-table td { padding:8px 10px; border-bottom:1px solid var(--border); }
+.bulk-table input[type="number"] { width:100%; padding:8px 10px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-size:0.88rem; font-family:inherit; outline:none; text-align:right; }
+.bulk-table input[type="number"]:focus { border-color:var(--accent); }
+.bulk-table input[type="number"]::placeholder { color:var(--text-muted); text-align:right; }
+.bulk-table .bt-name { font-weight:600; white-space:nowrap; }
+.bulk-table .bt-profit { font-weight:600; font-size:0.82rem; }
+
 .ptable { width:100%; border-collapse:collapse; font-size:0.85rem; }
 .ptable th { text-align:left; padding:10px 12px; color:var(--text-dim); font-weight:600; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; border-bottom:2px solid var(--border); white-space:nowrap; }
 .ptable td { padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
@@ -340,31 +349,20 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
   <!-- Tab: Actions -->
   <div id="tab-actions" style="display:none">
     <div class="section">
-      <div class="section-title"><span class="icon">💸</span> Record Borrow</div>
-      <div class="input-row">
-        <select id="borrowPlayer"><option value="">Select player...</option></select>
-        <input type="number" id="borrowAmount" placeholder="Amount (€)" min="1" step="1">
+      <div class="section-title" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <span><span class="icon">💰</span> Quick Entry</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <label style="font-size:0.8rem;color:var(--text-dim)">Date:</label>
+          <input type="date" id="bulkDate" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.82rem;font-family:inherit;color-scheme:dark">
+          <button class="btn btn-outline btn-sm" onclick="document.getElementById('bulkDate').value=''">Today</button>
+        </div>
       </div>
-      <div class="input-row">
-        <input type="date" id="borrowDate" style="color:var(--text-dim)">
-        <button class="btn btn-outline btn-sm" onclick="document.getElementById('borrowDate').value=''" style="white-space:nowrap">Now</button>
-        <button class="btn btn-danger" onclick="recordBorrow()">- Borrow</button>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px">Enter borrow and return amounts for each player. Leave empty to skip. Click Save to record all at once.</p>
+      <div style="overflow-x:auto" id="bulkEntryWrap"></div>
+      <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-outline" onclick="clearBulkInputs()">Clear All</button>
+        <button class="btn btn-primary" onclick="saveBulkEntries()" style="padding:12px 28px;font-size:0.95rem">💾 Save All Entries</button>
       </div>
-      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">Leave empty for today, or pick a date for backdated entries.</div>
-      <div id="borrowInfo" style="font-size:0.82rem;color:var(--text-dim);margin-top:4px"></div>
-    </div>
-    <div class="section">
-      <div class="section-title"><span class="icon">💰</span> Record Return</div>
-      <div class="input-row">
-        <select id="returnPlayer"><option value="">Select player...</option></select>
-        <input type="number" id="returnAmount" placeholder="Amount (€)" min="1" step="1">
-      </div>
-      <div class="input-row">
-        <input type="date" id="returnDate" style="color:var(--text-dim)">
-        <button class="btn btn-outline btn-sm" onclick="document.getElementById('returnDate').value=''" style="white-space:nowrap">Now</button>
-        <button class="btn btn-primary" onclick="recordReturn()" style="background:var(--green);color:#0c0f14">+ Return</button>
-      </div>
-      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">Leave empty for today, or pick a date for backdated entries.</div>
     </div>
   </div>
 
@@ -872,63 +870,85 @@ function populatePlayerPinSelect() {
   sel.value = val;
 }
 
-// ─── Actions ───
-function populateSelects() {
-  ['borrowPlayer','returnPlayer'].forEach(id => {
-    const sel = document.getElementById(id);
-    const val = sel.value;
-    sel.innerHTML = '<option value="">Select player...</option>' + getPlayerNames().map(n => `<option value="${n}">${n}</option>`).join('');
-    sel.value = val;
-  });
-  document.getElementById('borrowPlayer').onchange = function() {
-    const info = document.getElementById('borrowInfo');
-    if (this.value) {
-      const s = getPlayerStats(this.value);
-      info.textContent = `${this.value}: ${s.todayBorrows}/10 borrows today, total borrowed: ${formatCurrency(s.totalBorrowed)}`;
-    } else info.textContent = '';
-  };
-}
+// ─── Actions (Bulk Entry) ───
+function populateSelects() { renderBulkEntry(); }
 
-function recordBorrow() {
-  if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
-  const player = document.getElementById('borrowPlayer').value;
-  const amount = parseFloat(document.getElementById('borrowAmount').value);
-  const dateVal = document.getElementById('borrowDate').value;
-  if (!player) return showToast('Select a player');
-  if (!amount || amount <= 0) return showToast('Enter a valid amount');
-  const timestamp = dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : new Date().toISOString();
-  // Only enforce daily borrow limit for today's transactions
-  if (!dateVal) {
-    const s = getPlayerStats(player);
-    if (s.todayBorrows >= 10) return showToast(`${player} has reached 10 borrows today!`);
+function renderBulkEntry() {
+  const wrap = document.getElementById('bulkEntryWrap');
+  if (!wrap) return;
+  if (data.players.length === 0) {
+    wrap.innerHTML = '<div class="empty"><div class="icon">💰</div><p>Add players first to record transactions.</p></div>';
+    return;
   }
-  data.transactions.push({ id: genId(), player, type:'borrow', amount, timestamp });
-  document.getElementById('borrowAmount').value = '';
-  document.getElementById('borrowDate').value = '';
-  saveData();
-  updateStats();
-  renderPlayers();
-  const dateLabel = dateVal ? ' (backdated)' : '';
-  showToast(`${player} borrowed ${formatCurrency(amount)}${dateLabel}`);
+  let html = '<table class="bulk-table"><thead><tr>';
+  html += '<th>#</th><th>Player</th><th style="text-align:right">Borrow (€)</th><th style="text-align:right">Return (€)</th><th style="text-align:right;font-size:0.7rem">Current P/L</th>';
+  html += '</tr></thead><tbody>';
+  data.players.forEach((p, idx) => {
+    const s = getPlayerStats(p.name);
+    const profit = s.totalReturned - s.totalBorrowed;
+    const profitColor = profit > 0 ? 'var(--green)' : profit < 0 ? 'var(--red)' : 'var(--text-dim)';
+    const profitText = `${profit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(profit))}`;
+    html += `<tr>
+      <td style="color:var(--text-muted)">${idx+1}</td>
+      <td class="bt-name">${p.icon||'🎰'} ${p.name}</td>
+      <td><input type="number" id="bulk-borrow-${idx}" placeholder="0" min="0" step="1" tabindex="${idx*2+1}"></td>
+      <td><input type="number" id="bulk-return-${idx}" placeholder="0" min="0" step="1" tabindex="${idx*2+2}"></td>
+      <td class="bt-profit" style="color:${profitColor};text-align:right">${profitText}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
 }
 
-function recordReturn() {
+window.clearBulkInputs = function() {
+  data.players.forEach((p, idx) => {
+    const b = document.getElementById('bulk-borrow-' + idx);
+    const r = document.getElementById('bulk-return-' + idx);
+    if (b) b.value = '';
+    if (r) r.value = '';
+  });
+  document.getElementById('bulkDate').value = '';
+  showToast('Inputs cleared');
+};
+
+window.saveBulkEntries = function() {
   if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
-  const player = document.getElementById('returnPlayer').value;
-  const amount = parseFloat(document.getElementById('returnAmount').value);
-  const dateVal = document.getElementById('returnDate').value;
-  if (!player) return showToast('Select a player');
-  if (!amount || amount <= 0) return showToast('Enter a valid amount');
+  const dateVal = document.getElementById('bulkDate').value;
   const timestamp = dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : new Date().toISOString();
-  data.transactions.push({ id: genId(), player, type:'return', amount, timestamp });
-  document.getElementById('returnAmount').value = '';
-  document.getElementById('returnDate').value = '';
+  let count = 0;
+  let errors = [];
+
+  data.players.forEach((p, idx) => {
+    const bInput = document.getElementById('bulk-borrow-' + idx);
+    const rInput = document.getElementById('bulk-return-' + idx);
+    const borrow = parseFloat(bInput?.value) || 0;
+    const ret = parseFloat(rInput?.value) || 0;
+
+    if (borrow > 0) {
+      // Check daily borrow limit only for today
+      if (!dateVal) {
+        const s = getPlayerStats(p.name);
+        if (s.todayBorrows >= 10) { errors.push(`${p.name}: max 10 borrows/day`); return; }
+      }
+      data.transactions.push({ id: genId(), player: p.name, type:'borrow', amount: borrow, timestamp });
+      count++;
+    }
+    if (ret > 0) {
+      data.transactions.push({ id: genId(), player: p.name, type:'return', amount: ret, timestamp });
+      count++;
+    }
+  });
+
+  if (count === 0 && errors.length === 0) return showToast('No amounts entered');
+
   saveData();
   updateStats();
   renderPlayers();
+  renderBulkEntry();
   const dateLabel = dateVal ? ' (backdated)' : '';
-  showToast(`${player} returned ${formatCurrency(amount)}${dateLabel}`);
-}
+  if (errors.length > 0) showToast(`⚠️ ${errors.join(', ')}`);
+  else showToast(`💾 Saved ${count} entries${dateLabel}`);
+};
 
 // ─── History ───
 function renderHistory() {
@@ -1959,9 +1979,8 @@ window.addPlayer = addPlayer;
 window.showAddPlayerModal = window.showAddPlayerModal;
 window.cancelAddPlayer = window.cancelAddPlayer;
 window.removePlayer = removePlayer;
-window.recordBorrow = recordBorrow;
-window.recordReturn = recordReturn;
 window.deleteTransaction = deleteTransaction;
+window.renderBulkEntry = renderBulkEntry;
 window.switchTab = switchTab;
 window.toggleAdmin = toggleAdmin;
 window.exportData = exportData;
