@@ -811,7 +811,7 @@ function removePlayer(name) {
 }
 
 function getPlayerStats(name) {
-  const txns = data.transactions.filter(t => t.player === name && !t.isSettlement);
+  const txns = data.transactions.filter(t => t.player === name && !t.isSettlement && !t.isOffset);
   const today = new Date().toDateString();
   const todayBorrows = txns.filter(t => t.type === 'borrow' && new Date(t.timestamp).toDateString() === today).length;
   const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
@@ -838,7 +838,7 @@ function renderPlayers() {
   html += '</tr></thead><tbody>';
 
   data.players.forEach((p, idx) => {
-    const gameTxns = data.transactions.filter(t => t.player === p.name && !t.isSettlement);
+    const gameTxns = data.transactions.filter(t => t.player === p.name && !t.isSettlement && !t.isOffset);
     const totalBorrowed = gameTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
     const totalReturned = gameTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
     const profit = totalReturned - totalBorrowed;
@@ -897,7 +897,7 @@ function renderSessionView() {
   const filterDate = dateFilter ? new Date(dateFilter + 'T12:00:00').toDateString() : null;
 
   // Get all unique session dates
-  const gameTxns = data.transactions.filter(t => !t.isSettlement);
+  const gameTxns = data.transactions.filter(t => !t.isSettlement && !t.isOffset);
   const allDates = [...new Set(gameTxns.map(t => new Date(t.timestamp).toDateString()))].sort((a,b) => new Date(b) - new Date(a));
 
   if (allDates.length === 0) {
@@ -1021,7 +1021,7 @@ function renderBulkEntry() {
   const dateVal = document.getElementById('bulkDate')?.value;
   const filterDate = dateVal ? new Date(dateVal).toDateString() : new Date().toDateString();
   const isToday = !dateVal || filterDate === new Date().toDateString();
-  const dayHasData = data.transactions.some(t => !t.isSettlement && new Date(t.timestamp).toDateString() === filterDate);
+  const dayHasData = data.transactions.some(t => !t.isSettlement && !t.isOffset && new Date(t.timestamp).toDateString() === filterDate);
 
   let html = '<table class="bulk-table"><thead><tr>';
   html += '<th>#</th><th>Player</th>';
@@ -1037,7 +1037,7 @@ function renderBulkEntry() {
   let totalDayBorrowed = 0, totalDayReturned = 0;
 
   data.players.forEach((p, idx) => {
-    const dayTxns = data.transactions.filter(t => t.player === p.name && !t.isSettlement && new Date(t.timestamp).toDateString() === filterDate);
+    const dayTxns = data.transactions.filter(t => t.player === p.name && !t.isSettlement && !t.isOffset && new Date(t.timestamp).toDateString() === filterDate);
     const dayBorrowCount = dayTxns.filter(t => t.type === 'borrow').length;
     const dayBorrowed = dayTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
     const dayReturned = dayTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
@@ -1111,7 +1111,7 @@ window.saveBulkAs = function(type) {
 
   entries.forEach(e => {
     if (type === 'borrow' && !dateVal) {
-      const dayTxns = data.transactions.filter(t => t.player === e.player && !t.isSettlement && new Date(t.timestamp).toDateString() === new Date().toDateString());
+      const dayTxns = data.transactions.filter(t => t.player === e.player && !t.isSettlement && !t.isOffset && new Date(t.timestamp).toDateString() === new Date().toDateString());
       const dayBorrowCount = dayTxns.filter(t => t.type === 'borrow').length;
       if (dayBorrowCount >= getBorrowLimit()) { errors.push(`${e.player}: limit reached`); return; }
     }
@@ -1207,16 +1207,7 @@ function renderSettlement() {
 
   const isAdm = isAdminAny();
 
-  // Build balances from GAME transactions only (exclude settlements and offsets from settlement calc)
-  const balances = data.players.map(p => {
-    const txns = data.transactions.filter(t => t.player === p.name && !t.isSettlement);
-    const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
-    const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
-    const profit = totalReturned - totalBorrowed;
-    return { name: p.name, icon: p.icon || '🎰', profit };
-  });
-
-  // Build balances from GAME transactions only
+  // Build balances from GAME transactions + offsets (exclude only settlement transactions)
   const gameBalances = data.players.map(p => {
     const txns = data.transactions.filter(t => t.player === p.name && !t.isSettlement);
     const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
@@ -1435,7 +1426,7 @@ window.offsetBalanceOnDate = function(name, dateStr) {
 
 window.offsetDayTotal = function(filterDateStr, datePickerVal) {
   if (!canWrite()) return showToast('🔒 Admin access required');
-  const gameTxns = data.transactions.filter(t => !t.isSettlement && new Date(t.timestamp).toDateString() === filterDateStr);
+  const gameTxns = data.transactions.filter(t => !t.isSettlement && !t.isOffset && new Date(t.timestamp).toDateString() === filterDateStr);
   const totalBorrowed = gameTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
   const totalReturned = gameTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
   const totalProfit = totalReturned - totalBorrowed;
@@ -1484,12 +1475,13 @@ window.offsetDayTotal = function(filterDateStr, datePickerVal) {
 function offsetBalanceForPlayer(name, dateStr) {
   if (!canWrite()) return showToast('🔒 Admin access required');
 
-  // Calculate balance — if dateStr provided, only for that day
+  // Calculate balance — if dateStr provided, only for that day (game txns only, no offsets)
+  // If all-time, include offsets to get current balance
   let txns;
   if (dateStr) {
-    txns = data.transactions.filter(t => t.player === name && !t.isSettlement && new Date(t.timestamp).toDateString() === dateStr);
+    txns = data.transactions.filter(t => t.player === name && !t.isSettlement && !t.isOffset && new Date(t.timestamp).toDateString() === dateStr);
   } else {
-    txns = data.transactions.filter(t => t.player === name);
+    txns = data.transactions.filter(t => t.player === name && !t.isSettlement);
   }
   const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
   const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
@@ -1521,7 +1513,7 @@ function offsetBalanceForPlayer(name, dateStr) {
 // ─── Stats ───
 function updateStats() {
   document.getElementById('statPlayers').textContent = data.players.length;
-  const gameTxns = data.transactions.filter(t => !t.isSettlement);
+  const gameTxns = data.transactions.filter(t => !t.isSettlement && !t.isOffset);
   const borrowed = gameTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
   const returned = gameTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
   document.getElementById('statBorrowed').textContent = formatCurrency(borrowed);
@@ -1543,7 +1535,7 @@ function renderStats() {
 
   // Build player stats array
   const playerData = data.players.map(p => {
-    const txns = data.transactions.filter(t => t.player === p.name && !t.isSettlement);
+    const txns = data.transactions.filter(t => t.player === p.name && !t.isSettlement && !t.isOffset);
     const borrows = txns.filter(t => t.type === 'borrow');
     const returns = txns.filter(t => t.type === 'return');
     const totalBorrowed = borrows.reduce((s,t) => s + t.amount, 0);
@@ -1610,7 +1602,7 @@ function renderStats() {
   document.getElementById('playerStatsDetail').innerHTML = detailHtml;
 
   // ── Club Overview ──
-  const allGameTxns = data.transactions.filter(t => !t.isSettlement);
+  const allGameTxns = data.transactions.filter(t => !t.isSettlement && !t.isOffset);
   const totalBorrowed = allGameTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
   const totalReturned = allGameTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
   const totalSessions = new Set(allGameTxns.map(t => new Date(t.timestamp).toDateString())).size;
@@ -2282,7 +2274,7 @@ function renderWelcomeBanner() {
   const player = data.players.find(p => p.name.toLowerCase() === displayName.toLowerCase());
   let statsHtml = '';
   if (player) {
-    const txns = data.transactions.filter(t => t.player === player.name && !t.isSettlement);
+    const txns = data.transactions.filter(t => t.player === player.name && !t.isSettlement && !t.isOffset);
     const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
     const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
     const profit = totalReturned - totalBorrowed;
