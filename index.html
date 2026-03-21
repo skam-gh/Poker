@@ -578,6 +578,16 @@ function ensureAdmin(d) {
   if (!d.settings) d.settings = {};
   if (d.settings.borrowLimit === undefined) d.settings.borrowLimit = 1;
   if (!d.settlements) d.settlements = [];
+  // One-time migration: remove old settlement transactions that were stored as fake borrows/returns
+  if (!d._settlementMigrated) {
+    const oldSettlements = d.transactions.filter(t => t.note && t.note.startsWith('Settlement'));
+    if (oldSettlements.length > 0) {
+      d.transactions = d.transactions.filter(t => !t.note || !t.note.startsWith('Settlement'));
+      d._settlementMigrated = true;
+    } else {
+      d._settlementMigrated = true;
+    }
+  }
   // Clean up any old localStorage keys from previous versions
   localStorage.removeItem('poker_owner_pin');
   localStorage.removeItem('poker_moderators');
