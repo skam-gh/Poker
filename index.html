@@ -970,12 +970,12 @@ function renderSessionView() {
   const totalProfit = totalReturned - totalBorrowed;
   const totalProfitColor = totalProfit > 0 ? 'var(--green)' : totalProfit < 0 ? 'var(--red)' : 'var(--text-dim)';
   const totalCanOffset = isAdm && Math.abs(totalProfit) > 0 && Math.abs(totalProfit) <= 0.25;
-  const totalOffsetNote = totalCanOffset ? ` <span style="font-size:0.7rem;color:var(--text-muted)">(can offset)</span>` : '';
+  const totalOffsetBtn = totalCanOffset ? ` <button class="btn btn-outline btn-sm" onclick="offsetDayTotal('${filterDate}','${dateFilter || toLocalDateStr(new Date())}')" style="font-size:0.65rem;padding:1px 6px">✂️ Offset</button>` : '';
   html += `<tr style="border-top:2px solid var(--border)">
     <td></td><td style="font-weight:700;color:var(--text-dim)">TOTAL</td><td></td>
     <td style="color:var(--red);font-weight:700">${formatCurrency(totalBorrowed)}</td>
     <td style="color:var(--green);font-weight:700">${formatCurrency(totalReturned)}</td>
-    <td style="color:${totalProfitColor};font-weight:700">${totalProfit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(totalProfit))}${totalOffsetNote}</td>
+    <td style="color:${totalProfitColor};font-weight:700">${totalProfit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(totalProfit))}${totalOffsetBtn}</td>
   </tr>`;
 
   html += '</tbody></table>';
@@ -1422,6 +1422,54 @@ window.offsetBalance = function(name) {
 
 window.offsetBalanceOnDate = function(name, dateStr) {
   offsetBalanceForPlayer(name, dateStr);
+};
+
+window.offsetDayTotal = function(filterDateStr, datePickerVal) {
+  if (!canWrite()) return showToast('🔒 Admin access required');
+  const gameTxns = data.transactions.filter(t => !t.isSettlement && new Date(t.timestamp).toDateString() === filterDateStr);
+  const totalBorrowed = gameTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+  const totalReturned = gameTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+  const totalProfit = totalReturned - totalBorrowed;
+  const amount = Math.round(Math.abs(totalProfit) * 100) / 100;
+
+  if (amount === 0) return showToast('Already balanced');
+  if (amount > 0.25) return showToast('Imbalance too large to offset (max €0.25)');
+
+  // Find best player to offset: the biggest winner (if total > 0) or biggest loser (if total < 0)
+  const playerBalances = [];
+  data.players.forEach(p => {
+    const pTxns = gameTxns.filter(t => t.player === p.name);
+    if (pTxns.length === 0) return;
+    const b = pTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+    const r = pTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+    playerBalances.push({ name: p.name, profit: r - b });
+  });
+
+  let target;
+  if (totalProfit > 0) {
+    target = playerBalances.filter(p => p.profit > 0).sort((a,b) => b.profit - a.profit)[0];
+  } else {
+    target = playerBalances.filter(p => p.profit < 0).sort((a,b) => a.profit - b.profit)[0];
+  }
+
+  if (!target) return showToast('No suitable player found');
+
+  const type = totalProfit > 0 ? 'borrow' : 'return';
+  const action = totalProfit > 0 ? `borrow of ${formatCurrency(amount)} to ${target.name} (reduce winnings)` : `return of ${formatCurrency(amount)} to ${target.name} (clear debt)`;
+  const dayLabel = new Date(datePickerVal + 'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+
+  if (!confirm(`Offset day total of ${formatCurrency(amount)} on ${dayLabel}?\n\nThis will add a ${action}.\n\nProceed?`)) return;
+
+  const timestamp = new Date(datePickerVal + 'T12:00:00').toISOString();
+  data.transactions.push({ id: genId(), player: target.name, type, amount, timestamp, isOffset: true });
+  saveData();
+  logAdminAction(`Offset day total ${formatCurrency(amount)} on ${dayLabel} via ${target.name}`);
+  renderSettlement();
+  renderPlayers();
+  renderSessionView();
+  renderHistory();
+  updateStats();
+  showToast(`✂️ Offset ${formatCurrency(amount)} on ${dayLabel} via ${target.name}`);
 };
 
 function offsetBalanceForPlayer(name, dateStr) {
