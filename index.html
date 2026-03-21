@@ -1312,6 +1312,7 @@ function renderSettlement() {
       shHtml += `<div style="margin-bottom:8px;font-size:0.82rem;color:var(--text-dim)">Total paid: <strong style="color:var(--accent)">${formatCurrency(totalPaid)}</strong> across ${settlements.length} payment(s)</div>`;
       shHtml += '<div style="margin-bottom:16px">';
       [...settlements].reverse().forEach(s => {
+        const deleteBtn = isAdm ? `<button class="delete-btn" onclick="deleteSettlement('${s.id}')" title="Delete" style="margin-left:4px">✕</button>` : '';
         shHtml += `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:4px;font-size:0.85rem;flex-wrap:wrap">
           <span>🤝</span>
           <span style="color:var(--red);font-weight:600">${s.from}</span>
@@ -1320,6 +1321,7 @@ function renderSettlement() {
           <span style="color:var(--text-dim)">to</span>
           <span style="color:var(--green);font-weight:600">${s.to}</span>
           <span style="color:var(--text-muted);font-size:0.75rem;margin-left:auto">${formatDateTime(s.timestamp)}</span>
+          ${deleteBtn}
         </div>`;
       });
       shHtml += '</div>';
@@ -1416,6 +1418,19 @@ window.clearSettlements = function() {
   showToast('Settlements cleared');
 };
 
+window.deleteSettlement = function(id) {
+  if (!canWrite()) return showToast('🔒 Admin access required');
+  const s = (data.settlements || []).find(x => x.id === id);
+  if (!s) return;
+  if (!confirm(`Delete settlement: ${s.from} paid ${formatCurrency(s.amount)} to ${s.to}?`)) return;
+  data.settlements = data.settlements.filter(x => x.id !== id);
+  saveData();
+  logAdminAction(`Deleted settlement: ${s.from} paid ${formatCurrency(s.amount)} to ${s.to}`);
+  renderSettlement();
+  renderHistory();
+  showToast('Settlement deleted');
+};
+
 window.offsetBalance = function(name) {
   offsetBalanceForPlayer(name, null);
 };
@@ -1475,29 +1490,37 @@ window.offsetDayTotal = function(filterDateStr, datePickerVal) {
 function offsetBalanceForPlayer(name, dateStr) {
   if (!canWrite()) return showToast('🔒 Admin access required');
 
-  // Calculate balance — if dateStr provided, only for that day (game txns only, no offsets)
-  // If all-time, include offsets to get current balance
-  let txns;
+  let profit;
   if (dateStr) {
-    txns = data.transactions.filter(t => t.player === name && !t.isSettlement && !t.isOffset && new Date(t.timestamp).toDateString() === dateStr);
+    // Day view: calculate from game txns only (no offsets, no settlements)
+    const txns = data.transactions.filter(t => t.player === name && !t.isSettlement && !t.isOffset && new Date(t.timestamp).toDateString() === dateStr);
+    const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+    const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+    profit = totalReturned - totalBorrowed;
   } else {
-    txns = data.transactions.filter(t => t.player === name && !t.isSettlement);
+    // Settlement tab: game balance (incl offsets) minus settlements = adjusted balance
+    const txns = data.transactions.filter(t => t.player === name && !t.isSettlement);
+    const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+    const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+    profit = totalReturned - totalBorrowed;
+    // Subtract settlements
+    (data.settlements || []).forEach(s => {
+      if (s.from === name) profit += s.amount;
+      if (s.to === name) profit -= s.amount;
+    });
+    profit = Math.round(profit * 100) / 100;
   }
-  const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
-  const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
-  const profit = totalReturned - totalBorrowed;
 
   if (Math.abs(profit) > 0.25) return showToast('Balance too large to offset (max €0.25)');
-  if (profit === 0) return showToast('Already balanced');
+  if (Math.abs(profit) < 0.01) return showToast('Already balanced');
 
   const amount = Math.round(Math.abs(profit) * 100) / 100;
   const type = profit > 0 ? 'borrow' : 'return';
   const action = profit > 0 ? `add borrow of ${formatCurrency(amount)} (reduce winnings)` : `add return of ${formatCurrency(amount)} (clear debt)`;
   const dayLabel = dateStr ? ` for ${new Date(dateStr).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}` : '';
 
-  if (!confirm(`Offset ${name}'s balance of ${formatCurrency(Math.abs(profit))}${dayLabel}?\n\nThis will ${action} to zero out.\n\nProceed?`)) return;
+  if (!confirm(`Offset ${name}'s balance of ${formatCurrency(amount)}${dayLabel}?\n\nThis will ${action} to zero out.\n\nProceed?`)) return;
 
-  // Use the session date if provided, otherwise today
   const timestamp = dateStr ? new Date(dateStr).toISOString() : new Date().toISOString();
   data.transactions.push({ id: genId(), player: name, type, amount, timestamp, isOffset: true });
   saveData();
