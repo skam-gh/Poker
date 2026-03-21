@@ -738,6 +738,7 @@ function formatDateTime(iso) {
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function getBorrowLimit() { return (data.settings && data.settings.borrowLimit) || 1; }
+function toLocalDateStr(d) { const dt = new Date(d); return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0'); }
 
 // ─── Tabs ───
 const ALL_TABS = ['players','sessions','actions','history','settlement','stats','admin'];
@@ -918,7 +919,7 @@ function renderSessionView() {
       const net = returned - borrowed;
       const netColor = net > 0 ? 'var(--green)' : net < 0 ? 'var(--red)' : 'var(--text-dim)';
       const dateObj = new Date(d);
-      const dateStr = dateObj.toISOString().split('T')[0];
+      const dateStr = toLocalDateStr(dateObj);
       html += `<tr style="cursor:pointer" onclick="pickSessionDate('${dateStr}')">
         <td style="font-weight:600">${dateObj.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}</td>
         <td>${players}</td>
@@ -2176,7 +2177,7 @@ function exportData() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `almere-poker-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = `almere-poker-backup-${toLocalDateStr(new Date())}.json`;
   a.click();
   URL.revokeObjectURL(url);
   localStorage.setItem('poker_last_export', new Date().toISOString());
