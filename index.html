@@ -602,15 +602,14 @@ function ensureAdmin(d) {
   if (!d.settings) d.settings = {};
   if (d.settings.borrowLimit === undefined) d.settings.borrowLimit = 1;
   if (!d.settlements) d.settlements = [];
-  // One-time migration: remove old settlement transactions that were stored as fake borrows/returns
-  if (!d._settlementMigrated) {
-    const oldSettlements = d.transactions.filter(t => t.note && t.note.startsWith('Settlement'));
-    if (oldSettlements.length > 0) {
-      d.transactions = d.transactions.filter(t => !t.note || !t.note.startsWith('Settlement'));
-      d._settlementMigrated = true;
-    } else {
-      d._settlementMigrated = true;
-    }
+  // Migration: remove ALL fake settlement transactions (old note-based AND new isSettlement-based)
+  if (!d._settlementMigrated2) {
+    d.transactions = d.transactions.filter(t => {
+      if (t.note && t.note.startsWith('Settlement')) return false;
+      if (t.isSettlement) return false;
+      return true;
+    });
+    d._settlementMigrated2 = true;
   }
   // Clean up any old localStorage keys from previous versions
   localStorage.removeItem('poker_owner_pin');
@@ -1208,9 +1207,9 @@ function renderSettlement() {
 
   const isAdm = isAdminAny();
 
-  // Build balances from GAME transactions only (not settlements)
+  // Build balances from GAME transactions only (exclude settlements and offsets from settlement calc)
   const balances = data.players.map(p => {
-    const txns = data.transactions.filter(t => t.player === p.name);
+    const txns = data.transactions.filter(t => t.player === p.name && !t.isSettlement);
     const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
     const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
     const profit = totalReturned - totalBorrowed;
@@ -1362,7 +1361,7 @@ window.recordQuickSettlement = function(fromName, toName, amount) {
   showToast(`✓ Marked: ${fromName} paid ${formatCurrency(amount)} to ${toName}`);
 };
 
-// Manual settlement — real payment that updates balances
+// Manual settlement — records payment without creating borrow/return transactions
 window.recordManualSettlement = function() {
   if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
   const payer = document.getElementById('settlePayer').value;
@@ -1374,12 +1373,9 @@ window.recordManualSettlement = function() {
   if (payer === receiver) return showToast('Payer and receiver must be different');
   if (!amount || amount <= 0) return showToast('Enter a valid amount');
   const dateLabel = dateVal ? ` on ${new Date(dateVal).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}` : '';
-  if (!confirm(`Record real payment:\n\n${payer} paid ${formatCurrency(amount)} to ${receiver}${dateLabel}\n\nThis will update balances and recalculate settlements.\n\nProceed?`)) return;
+  if (!confirm(`Record payment:\n\n${payer} paid ${formatCurrency(amount)} to ${receiver}${dateLabel}\n\nProceed?`)) return;
 
   const ts = dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : new Date().toISOString();
-  data.transactions.push({ id: genId(), player: payer, type:'return', amount, timestamp: ts, isSettlement: true });
-  data.transactions.push({ id: genId(), player: receiver, type:'borrow', amount, timestamp: ts, isSettlement: true });
-
   if (!data.settlements) data.settlements = [];
   data.settlements.push({
     id: genId(),
@@ -1393,15 +1389,10 @@ window.recordManualSettlement = function() {
   saveData();
   logAdminAction(`Manual settlement: ${payer} paid ${formatCurrency(amount)} to ${receiver}${dateLabel}`);
 
-  data.settlements = data.settlements.filter(s => s.type === 'real');
-  saveData();
-
   document.getElementById('settleAmount').value = '';
   document.getElementById('settleDate').value = '';
   renderSettlement();
-  renderPlayers();
   renderHistory();
-  updateStats();
   showToast(`🤝 ${payer} paid ${formatCurrency(amount)} to ${receiver}${dateLabel}`);
 };
 
