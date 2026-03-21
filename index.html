@@ -1512,8 +1512,9 @@ function offsetBalanceForPlayer(name, dateStr) {
 // ─── Stats ───
 function updateStats() {
   document.getElementById('statPlayers').textContent = data.players.length;
-  const borrowed = data.transactions.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
-  const returned = data.transactions.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+  const gameTxns = data.transactions.filter(t => !t.isSettlement);
+  const borrowed = gameTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+  const returned = gameTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
   document.getElementById('statBorrowed').textContent = formatCurrency(borrowed);
   document.getElementById('statReturned').textContent = formatCurrency(returned);
   const out = borrowed - returned;
@@ -1600,16 +1601,17 @@ function renderStats() {
   document.getElementById('playerStatsDetail').innerHTML = detailHtml;
 
   // ── Club Overview ──
-  const totalBorrowed = data.transactions.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
-  const totalReturned = data.transactions.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
-  const totalSessions = new Set(data.transactions.map(t => new Date(t.timestamp).toDateString())).size;
-  const totalTxns = data.transactions.length;
+  const allGameTxns = data.transactions.filter(t => !t.isSettlement);
+  const totalBorrowed = allGameTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+  const totalReturned = allGameTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+  const totalSessions = new Set(allGameTxns.map(t => new Date(t.timestamp).toDateString())).size;
+  const totalTxns = allGameTxns.length;
   const winners = playerData.filter(p => p.profit > 0);
   const losers = playerData.filter(p => p.profit < 0);
   const biggestWinner = winners.length > 0 ? winners.sort((a,b) => b.profit - a.profit)[0] : null;
   const biggestLoser = losers.length > 0 ? losers.sort((a,b) => a.profit - b.profit)[0] : null;
   const mostActive = [...playerData].sort((a,b) => b.sessions - a.sessions)[0];
-  const highestSingleBorrow = data.transactions.filter(t => t.type === 'borrow').sort((a,b) => b.amount - a.amount)[0];
+  const highestSingleBorrow = allGameTxns.filter(t => t.type === 'borrow').sort((a,b) => b.amount - a.amount)[0];
   const totalChipsInPlay = totalBorrowed;
   const avgProfitPerSession = totalSessions > 0 ? playerData.reduce((s,p) => s + Math.abs(p.profit), 0) / totalSessions : 0;
 
@@ -2271,7 +2273,7 @@ function renderWelcomeBanner() {
   const player = data.players.find(p => p.name.toLowerCase() === displayName.toLowerCase());
   let statsHtml = '';
   if (player) {
-    const txns = data.transactions.filter(t => t.player === player.name);
+    const txns = data.transactions.filter(t => t.player === player.name && !t.isSettlement);
     const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
     const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
     const profit = totalReturned - totalBorrowed;
