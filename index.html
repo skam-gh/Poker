@@ -313,6 +313,7 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
   <!-- Tabs -->
   <div class="tabs">
     <div class="tab active" onclick="switchTab('players')">👥 Players</div>
+    <div class="tab" onclick="switchTab('sessions')">🃏 Sessions</div>
     <div class="tab" onclick="switchTab('actions')">💰 Actions</div>
     <div class="tab" onclick="switchTab('history')">📜 History</div>
     <div class="tab" onclick="switchTab('settlement')">⚖️ Settlement</div>
@@ -320,19 +321,10 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
     <div class="tab" id="adminTabBtn" style="display:none" onclick="switchTab('admin')">👑 Admin</div>
   </div>
 
-  <!-- Tab: Players -->
+  <!-- Tab: Players (all-time cumulative) -->
   <div id="tab-players">
-    <div id="addPlayerRow" style="margin-bottom:16px">
-      <button class="btn btn-primary" onclick="showAddPlayerModal()" style="width:100%;padding:14px;font-size:0.95rem">+ Add New Player</button>
-    </div>
     <div class="section">
-      <div class="section-title" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
-        <span><span class="icon">👥</span> Players</span>
-        <div style="display:flex;align-items:center;gap:6px">
-          <input type="date" id="playerDateFilter" onchange="renderPlayers()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.82rem;font-family:inherit;color-scheme:dark">
-          <button class="btn btn-outline btn-sm" onclick="document.getElementById('playerDateFilter').value='';renderPlayers()">All time</button>
-        </div>
-      </div>
+      <div class="section-title"><span class="icon">👥</span> Players — All Time</div>
       <div style="overflow-x:auto" id="playerTableWrap"></div>
     </div>
     <!-- Player PIN setup -->
@@ -343,6 +335,24 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
         <select id="playerPinSelect"><option value="">Select your name...</option></select>
         <button class="btn btn-primary" onclick="setupPlayerPin(document.getElementById('playerPinSelect').value)">🔑 Set PIN</button>
       </div>
+    </div>
+    <div id="addPlayerRow" style="margin-top:8px">
+      <button class="btn btn-primary" onclick="showAddPlayerModal()" style="width:100%;padding:14px;font-size:0.95rem">+ Add New Player</button>
+    </div>
+  </div>
+
+  <!-- Tab: Poker Sessions (date-based view) -->
+  <div id="tab-sessions" style="display:none">
+    <div class="section">
+      <div class="section-title" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <span><span class="icon">🃏</span> Poker Sessions</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="date" id="sessionDateFilter" onchange="renderSessionView()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.82rem;font-family:inherit;color-scheme:dark">
+          <button class="btn btn-outline btn-sm" onclick="document.getElementById('sessionDateFilter').value='';renderSessionView()">All Dates</button>
+        </div>
+      </div>
+      <div id="sessionDateList" style="margin-bottom:12px"></div>
+      <div style="overflow-x:auto" id="sessionTableWrap"></div>
     </div>
   </div>
 
@@ -729,13 +739,14 @@ function genId() { return Date.now().toString(36) + Math.random().toString(36).s
 function getBorrowLimit() { return (data.settings && data.settings.borrowLimit) || 1; }
 
 // ─── Tabs ───
-const ALL_TABS = ['players','actions','history','settlement','stats','admin'];
+const ALL_TABS = ['players','sessions','actions','history','settlement','stats','admin'];
 function switchTab(tab) {
   document.querySelectorAll('.tab').forEach((el,i) => el.classList.toggle('active', ALL_TABS[i] === tab));
   ALL_TABS.forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? '' : 'none';
   });
+  if (tab === 'sessions') renderSessionView();
   if (tab === 'actions') populateSelects();
   if (tab === 'stats') renderStats();
   if (tab === 'history') renderHistory();
@@ -816,8 +827,6 @@ function renderPlayers() {
     return;
   }
 
-  const dateFilter = document.getElementById('playerDateFilter')?.value;
-  const filterDate = dateFilter ? new Date(dateFilter + 'T12:00:00').toDateString() : null;
   const isAdm = isAdminAny();
   const isMe = (name) => adminRole === 'player' && adminName === name;
 
@@ -828,15 +837,11 @@ function renderPlayers() {
   html += '</tr></thead><tbody>';
 
   data.players.forEach((p, idx) => {
-    // Filter transactions by date if set — exclude settlement transactions (game data only)
     const gameTxns = data.transactions.filter(t => t.player === p.name && !t.isSettlement);
-    const txns = filterDate
-      ? gameTxns.filter(t => new Date(t.timestamp).toDateString() === filterDate)
-      : gameTxns;
-    const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
-    const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+    const totalBorrowed = gameTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+    const totalReturned = gameTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
     const profit = totalReturned - totalBorrowed;
-    const borrowCount = txns.filter(t => t.type === 'borrow').length;
+    const borrowCount = gameTxns.filter(t => t.type === 'borrow').length;
     const profitColor = profit > 0 ? 'var(--green)' : profit < 0 ? 'var(--red)' : 'var(--text-dim)';
     const profitText = `${profit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(profit))}`;
     const me = isMe(p.name);
@@ -853,16 +858,13 @@ function renderPlayers() {
     html += `<td>${borrowCount}</td>`;
     if (isAdm) {
       const isOwnerPlayer = data.admin.ownerName && p.name.toLowerCase() === data.admin.ownerName.toLowerCase();
-      const canDelete = isOwner() || !isOwnerPlayer; // Only owner can delete owner row
+      const canDelete = isOwner() || !isOwnerPlayer;
       html += `<td class="pt-actions">${canDelete ? `<button class="btn btn-danger btn-sm" onclick="removePlayer('${p.name.replace(/'/g,"\\'")}')">✕</button>` : '<span style="font-size:0.7rem;color:var(--text-muted)">👑</span>'}</td>`;
     }
     html += '</tr>';
   });
 
   html += '</tbody></table>';
-  if (filterDate) {
-    html += `<div style="text-align:center;margin-top:10px;font-size:0.8rem;color:var(--text-muted)">Showing data for ${new Date(dateFilter).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}</div>`;
-  }
   wrap.innerHTML = html;
   populatePlayerPinSelect();
 }
@@ -884,6 +886,114 @@ function populatePlayerPinSelect() {
   }).join('');
   sel.value = val;
 }
+
+// ─── Poker Sessions (date-based view) ───
+function renderSessionView() {
+  const dateListEl = document.getElementById('sessionDateList');
+  const tableWrap = document.getElementById('sessionTableWrap');
+  if (!tableWrap) return;
+
+  const dateFilter = document.getElementById('sessionDateFilter')?.value;
+  const filterDate = dateFilter ? new Date(dateFilter + 'T12:00:00').toDateString() : null;
+
+  // Get all unique session dates
+  const gameTxns = data.transactions.filter(t => !t.isSettlement);
+  const allDates = [...new Set(gameTxns.map(t => new Date(t.timestamp).toDateString()))].sort((a,b) => new Date(b) - new Date(a));
+
+  if (allDates.length === 0) {
+    dateListEl.innerHTML = '';
+    tableWrap.innerHTML = '<div class="empty"><div class="icon">🃏</div><p>No poker sessions yet. Record borrows in the Actions tab to get started.</p></div>';
+    return;
+  }
+
+  // Show clickable date pills
+  dateListEl.innerHTML = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">' +
+    allDates.map(d => {
+      const dateObj = new Date(d);
+      const label = dateObj.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+      const isActive = filterDate === d;
+      const players = new Set(gameTxns.filter(t => new Date(t.timestamp).toDateString() === d).map(t => t.player)).size;
+      return `<button class="btn ${isActive ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="pickSessionDate('${dateObj.toISOString().split('T')[0]}')" style="font-size:0.78rem">${label} <span style="opacity:0.6">(${players})</span></button>`;
+    }).join('') + '</div>';
+
+  // If no date selected, show summary of all sessions
+  if (!filterDate) {
+    let html = '<table class="ptable"><thead><tr>';
+    html += '<th>Date</th><th>Players</th><th>Borrowed</th><th>Returned</th><th>Net</th>';
+    html += '</tr></thead><tbody>';
+    allDates.forEach(d => {
+      const dayTxns = gameTxns.filter(t => new Date(t.timestamp).toDateString() === d);
+      const players = new Set(dayTxns.map(t => t.player)).size;
+      const borrowed = dayTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+      const returned = dayTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+      const net = returned - borrowed;
+      const netColor = net > 0 ? 'var(--green)' : net < 0 ? 'var(--red)' : 'var(--text-dim)';
+      const dateObj = new Date(d);
+      const dateStr = dateObj.toISOString().split('T')[0];
+      html += `<tr style="cursor:pointer" onclick="pickSessionDate('${dateStr}')">
+        <td style="font-weight:600">${dateObj.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}</td>
+        <td>${players}</td>
+        <td style="color:var(--red)">${formatCurrency(borrowed)}</td>
+        <td style="color:var(--green)">${formatCurrency(returned)}</td>
+        <td style="color:${netColor};font-weight:600">${net >= 0 ? '+' : '-'}${formatCurrency(Math.abs(net))}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    tableWrap.innerHTML = html;
+    return;
+  }
+
+  // Show player breakdown for selected date
+  let html = '<table class="ptable"><thead><tr>';
+  html += '<th>#</th><th>Player</th><th>Borrows</th><th>Borrowed</th><th>Returned</th><th>P/L</th>';
+  html += '</tr></thead><tbody>';
+
+  let totalBorrowed = 0, totalReturned = 0;
+  const isMe = (name) => adminRole === 'player' && adminName === name;
+
+  data.players.forEach((p, idx) => {
+    const dayTxns = gameTxns.filter(t => t.player === p.name && new Date(t.timestamp).toDateString() === filterDate);
+    if (dayTxns.length === 0) return; // Only show players who played this day
+    const borrows = dayTxns.filter(t => t.type === 'borrow');
+    const returns = dayTxns.filter(t => t.type === 'return');
+    const borrowed = borrows.reduce((s,t) => s + t.amount, 0);
+    const returned = returns.reduce((s,t) => s + t.amount, 0);
+    const profit = returned - borrowed;
+    const profitColor = profit > 0 ? 'var(--green)' : profit < 0 ? 'var(--red)' : 'var(--text-dim)';
+    const me = isMe(p.name);
+    totalBorrowed += borrowed;
+    totalReturned += returned;
+
+    html += `<tr${me ? ' class="pt-me"' : ''}>
+      <td style="color:var(--text-muted)">${idx+1}</td>
+      <td class="pt-name">${p.icon||'🎰'} ${p.name}${me?' <span style="color:var(--green);font-size:0.7rem">(you)</span>':''}</td>
+      <td style="text-align:center">${borrows.length}</td>
+      <td style="color:var(--red)">${formatCurrency(borrowed)}</td>
+      <td style="color:var(--green)">${formatCurrency(returned)}</td>
+      <td class="pt-profit" style="color:${profitColor};font-weight:700">${profit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(profit))}</td>
+    </tr>`;
+  });
+
+  const totalProfit = totalReturned - totalBorrowed;
+  const totalProfitColor = totalProfit > 0 ? 'var(--green)' : totalProfit < 0 ? 'var(--red)' : 'var(--text-dim)';
+  html += `<tr style="border-top:2px solid var(--border)">
+    <td></td><td style="font-weight:700;color:var(--text-dim)">TOTAL</td><td></td>
+    <td style="color:var(--red);font-weight:700">${formatCurrency(totalBorrowed)}</td>
+    <td style="color:var(--green);font-weight:700">${formatCurrency(totalReturned)}</td>
+    <td style="color:${totalProfitColor};font-weight:700">${totalProfit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(totalProfit))}</td>
+  </tr>`;
+
+  html += '</tbody></table>';
+  html += `<div style="text-align:center;margin-top:10px;font-size:0.8rem;color:var(--text-muted)">${new Date(dateFilter).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>`;
+  tableWrap.innerHTML = html;
+}
+
+window.pickSessionDate = function(dateStr) {
+  const el = document.getElementById('sessionDateFilter');
+  if (el) el.value = dateStr;
+  renderSessionView();
+};
+window.renderSessionView = renderSessionView;
 
 // ─── Actions (Bulk Entry) ───
 function populateSelects() { renderBulkEntry(); }
@@ -2213,6 +2323,7 @@ window.cancelAddPlayer = window.cancelAddPlayer;
 window.removePlayer = removePlayer;
 window.deleteTransaction = deleteTransaction;
 window.renderBulkEntry = renderBulkEntry;
+window.renderPlayers = renderPlayers;
 window.switchTab = switchTab;
 window.toggleAdmin = toggleAdmin;
 window.exportData = exportData;
