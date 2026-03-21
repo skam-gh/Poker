@@ -1083,30 +1083,39 @@ window.clearBulkInputs = function() {
   showToast('Cleared');
 };
 
+let _bulkSaving = false;
 window.saveBulkAs = function(type) {
+  if (_bulkSaving) return;
   if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
+  _bulkSaving = true;
+
   const dateVal = document.getElementById('bulkDate').value;
   const timestamp = dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : new Date().toISOString();
   const label = type === 'borrow' ? 'Borrow' : 'Return';
   let count = 0;
   let errors = [];
 
+  // Collect all amounts first, then clear inputs immediately
+  const entries = [];
   data.players.forEach((p, idx) => {
     const inp = document.getElementById('bulk-amt-' + idx);
     const amount = parseFloat(inp?.value) || 0;
+    if (inp) inp.value = '';
     if (amount <= 0) return;
+    entries.push({ player: p.name, amount });
+  });
 
+  entries.forEach(e => {
     if (type === 'borrow' && !dateVal) {
-      const dayTxns = data.transactions.filter(t => t.player === p.name && !t.isSettlement && new Date(t.timestamp).toDateString() === new Date().toDateString());
+      const dayTxns = data.transactions.filter(t => t.player === e.player && !t.isSettlement && new Date(t.timestamp).toDateString() === new Date().toDateString());
       const dayBorrowCount = dayTxns.filter(t => t.type === 'borrow').length;
-      if (dayBorrowCount >= getBorrowLimit()) { errors.push(`${p.name}: limit reached`); return; }
+      if (dayBorrowCount >= getBorrowLimit()) { errors.push(`${e.player}: limit reached`); return; }
     }
-
-    data.transactions.push({ id: genId(), player: p.name, type, amount, timestamp });
+    data.transactions.push({ id: genId(), player: e.player, type, amount: e.amount, timestamp });
     count++;
   });
 
-  if (count === 0 && errors.length === 0) return showToast('No amounts entered');
+  if (count === 0 && errors.length === 0) { _bulkSaving = false; return showToast('No amounts entered'); }
 
   saveData();
   updateStats();
@@ -1115,6 +1124,7 @@ window.saveBulkAs = function(type) {
   const dateLabel = dateVal ? ' (backdated)' : '';
   if (errors.length > 0) showToast(`⚠️ Saved ${count}, skipped: ${errors.join(', ')}`);
   else showToast(`💾 ${count} ${label.toLowerCase()}s recorded${dateLabel}`);
+  setTimeout(() => { _bulkSaving = false; }, 500);
 };
 
 // ─── History ───
@@ -1326,6 +1336,9 @@ function renderSettlement() {
 // Quick settle from transfer row button — just marks as paid, no balance change
 window.recordQuickSettlement = function(fromName, toName, amount) {
   if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
+  // Check if already settled
+  const already = (data.settlements || []).find(s => s.from === fromName && s.to === toName && Math.abs(s.amount - amount) < 0.01);
+  if (already) return showToast('Already marked as paid');
   if (!confirm(`Mark as paid:\n\n${fromName} paid ${formatCurrency(amount)} to ${toName}\n\nProceed?`)) return;
   if (!data.settlements) data.settlements = [];
   data.settlements.push({
