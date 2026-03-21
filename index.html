@@ -329,7 +329,7 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
       <div class="section-title" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
         <span><span class="icon">👥</span> Players</span>
         <div style="display:flex;align-items:center;gap:6px">
-          <input type="date" id="playerDateFilter" onchange="renderPlayers()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.82rem;font-family:inherit">
+          <input type="date" id="playerDateFilter" onchange="renderPlayers()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.82rem;font-family:inherit;color-scheme:dark">
           <button class="btn btn-outline btn-sm" onclick="document.getElementById('playerDateFilter').value='';renderPlayers()">All time</button>
         </div>
       </div>
@@ -399,8 +399,21 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
     </div>
     <div class="section" id="settleTransfersSection">
       <div class="section-title"><span class="icon">🤝</span> Who Pays Whom</div>
-      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Minimum transfers needed to settle all balances. Click "Paid" when a payment is made.</p>
+      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Transfers needed to settle all balances. Click "Paid" when done. List stays fixed until reset.</p>
       <div id="settleTransfers"></div>
+    </div>
+    <div class="section" id="settleManualSection" style="display:none">
+      <div class="section-title"><span class="icon">💸</span> Record Payment Manually</div>
+      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Record a settlement that happened outside the suggested transfers.</p>
+      <div class="input-row">
+        <select id="settlePayer"><option value="">Who paid...</option></select>
+        <span style="color:var(--text-dim);padding:10px 4px">→</span>
+        <select id="settleReceiver"><option value="">Who received...</option></select>
+      </div>
+      <div class="input-row">
+        <input type="number" id="settleAmount" placeholder="Amount (€)" min="0.01" step="0.01">
+        <button class="btn btn-primary" onclick="recordManualSettlement()">🤝 Record</button>
+      </div>
     </div>
     <div class="section" id="settleActionSection"></div>
   </div>
@@ -786,7 +799,7 @@ function removePlayer(name) {
 }
 
 function getPlayerStats(name) {
-  const txns = data.transactions.filter(t => t.player === name);
+  const txns = data.transactions.filter(t => t.player === name && !t.isSettlement);
   const today = new Date().toDateString();
   const todayBorrows = txns.filter(t => t.type === 'borrow' && new Date(t.timestamp).toDateString() === today).length;
   const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
@@ -804,22 +817,22 @@ function renderPlayers() {
   }
 
   const dateFilter = document.getElementById('playerDateFilter')?.value;
-  const filterDate = dateFilter ? new Date(dateFilter).toDateString() : null;
+  const filterDate = dateFilter ? new Date(dateFilter + 'T12:00:00').toDateString() : null;
   const isAdm = isAdminAny();
   const isMe = (name) => adminRole === 'player' && adminName === name;
 
   let html = '<table class="ptable"><thead><tr>';
   html += '<th>#</th><th>Player</th>';
-  if (isAdm) html += '<th>Contact</th>';
   html += '<th>Borrowed</th><th>Returned</th><th>Profit/Loss</th><th>Borrows</th>';
   if (isAdm) html += '<th class="pt-actions"></th>';
   html += '</tr></thead><tbody>';
 
   data.players.forEach((p, idx) => {
-    // Filter transactions by date if set
+    // Filter transactions by date if set — exclude settlement transactions (game data only)
+    const gameTxns = data.transactions.filter(t => t.player === p.name && !t.isSettlement);
     const txns = filterDate
-      ? data.transactions.filter(t => t.player === p.name && new Date(t.timestamp).toDateString() === filterDate)
-      : data.transactions.filter(t => t.player === p.name);
+      ? gameTxns.filter(t => new Date(t.timestamp).toDateString() === filterDate)
+      : gameTxns;
     const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
     const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
     const profit = totalReturned - totalBorrowed;
@@ -829,13 +842,11 @@ function renderPlayers() {
     const me = isMe(p.name);
     const hasPin = !!p.pinHash;
     const rowCls = me ? ' class="pt-me"' : '';
-    const contact = [p.phone ? '📱' + p.phone : '', p.email ? '✉️' + p.email : ''].filter(Boolean).join(' ');
 
     html += `<tr${rowCls}>`;
     html += `<td style="color:var(--text-muted)">${idx+1}</td>`;
     const isOwnerPlayer = data.admin.ownerName && p.name.toLowerCase() === data.admin.ownerName.toLowerCase();
     html += `<td class="pt-name">${p.icon||'🎰'} ${p.name}${isOwnerPlayer?' <span style="color:#f59e0b;font-size:0.7rem">👑</span>':''}${me?' <span style="color:var(--green);font-size:0.7rem">(you)</span>':''}${hasPin?' <span style="color:var(--text-muted);font-size:0.7rem">🔑</span>':''}</td>`;
-    if (isAdm) html += `<td style="font-size:0.78rem;color:var(--text-muted)">${contact||'—'}</td>`;
     html += `<td style="color:var(--red)">${formatCurrency(totalBorrowed)}</td>`;
     html += `<td style="color:var(--green)">${formatCurrency(totalReturned)}</td>`;
     html += `<td class="pt-profit" style="color:${profitColor}">${profitText}</td>`;
@@ -888,7 +899,7 @@ function renderBulkEntry() {
   const dateVal = document.getElementById('bulkDate')?.value;
   const filterDate = dateVal ? new Date(dateVal).toDateString() : new Date().toDateString();
   const isToday = !dateVal || filterDate === new Date().toDateString();
-  const dayHasData = data.transactions.some(t => new Date(t.timestamp).toDateString() === filterDate);
+  const dayHasData = data.transactions.some(t => !t.isSettlement && new Date(t.timestamp).toDateString() === filterDate);
 
   let html = '<table class="bulk-table"><thead><tr>';
   html += '<th>#</th><th>Player</th>';
@@ -904,7 +915,7 @@ function renderBulkEntry() {
   let totalDayBorrowed = 0, totalDayReturned = 0;
 
   data.players.forEach((p, idx) => {
-    const dayTxns = data.transactions.filter(t => t.player === p.name && new Date(t.timestamp).toDateString() === filterDate);
+    const dayTxns = data.transactions.filter(t => t.player === p.name && !t.isSettlement && new Date(t.timestamp).toDateString() === filterDate);
     const dayBorrowCount = dayTxns.filter(t => t.type === 'borrow').length;
     const dayBorrowed = dayTxns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
     const dayReturned = dayTxns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
@@ -968,7 +979,7 @@ window.saveBulkAs = function(type) {
     if (amount <= 0) return;
 
     if (type === 'borrow' && !dateVal) {
-      const dayTxns = data.transactions.filter(t => t.player === p.name && new Date(t.timestamp).toDateString() === new Date().toDateString());
+      const dayTxns = data.transactions.filter(t => t.player === p.name && !t.isSettlement && new Date(t.timestamp).toDateString() === new Date().toDateString());
       const dayBorrowCount = dayTxns.filter(t => t.type === 'borrow').length;
       if (dayBorrowCount >= getBorrowLimit()) { errors.push(`${p.name}: limit reached`); return; }
     }
@@ -1149,7 +1160,7 @@ function renderSettlement() {
     if (settlements.length > 0) {
       shHtml += '<div style="margin-bottom:16px">';
       [...settlements].reverse().forEach(s => {
-        shHtml += `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:4px;font-size:0.85rem">
+        shHtml += `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:4px;font-size:0.85rem;flex-wrap:wrap">
           <span>🤝</span>
           <span style="color:var(--red);font-weight:600">${s.from}</span>
           <span style="color:var(--text-dim)">paid</span>
@@ -1164,30 +1175,87 @@ function renderSettlement() {
     settleSection.innerHTML = `<div class="section-title"><span class="icon">💸</span> Settlement Log</div>${shHtml}${shHtml ? '' : '<p style="color:var(--text-dim);font-size:0.85rem">No settlements recorded yet.</p>'}`;
     settleSection.style.display = '';
   }
+
+  // Show manual settlement form for admins
+  const manualSection = document.getElementById('settleManualSection');
+  if (manualSection) {
+    manualSection.style.display = isAdm && (losers.length > 0 || winners.length > 0) ? '' : 'none';
+    const payerSel = document.getElementById('settlePayer');
+    const receiverSel = document.getElementById('settleReceiver');
+    if (payerSel) {
+      payerSel.innerHTML = '<option value="">Who paid...</option>';
+      data.players.forEach(p => { payerSel.innerHTML += `<option value="${p.name}">${p.name}</option>`; });
+    }
+    if (receiverSel) {
+      receiverSel.innerHTML = '<option value="">Who received...</option>';
+      data.players.forEach(p => { receiverSel.innerHTML += `<option value="${p.name}">${p.name}</option>`; });
+    }
+  }
 }
 
-// Quick settle from transfer row button
+// Quick settle from transfer row button — just marks as paid, no balance change
 window.recordQuickSettlement = function(fromName, toName, amount) {
   if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
-  if (!confirm(`Record payment:\n\n${fromName} paid ${formatCurrency(amount)} to ${toName}\n\nProceed?`)) return;
-  doRecordSettlement(fromName, toName, amount);
-};
-
-function doRecordSettlement(fromName, toName, amount) {
+  if (!confirm(`Mark as paid:\n\n${fromName} paid ${formatCurrency(amount)} to ${toName}\n\nProceed?`)) return;
   if (!data.settlements) data.settlements = [];
   data.settlements.push({
     id: genId(),
     from: fromName,
     to: toName,
     amount,
+    type: 'mark',
     timestamp: new Date().toISOString(),
     recordedBy: adminName || 'Unknown'
   });
   saveData();
-  logAdminAction(`Settlement: ${fromName} paid ${formatCurrency(amount)} to ${toName}`);
+  logAdminAction(`Marked settled: ${fromName} paid ${formatCurrency(amount)} to ${toName}`);
   renderSettlement();
-  showToast(`🤝 ${fromName} paid ${formatCurrency(amount)} to ${toName}`);
-}
+  renderHistory();
+  showToast(`✓ Marked: ${fromName} paid ${formatCurrency(amount)} to ${toName}`);
+};
+
+// Manual settlement — real payment that updates balances
+window.recordManualSettlement = function() {
+  if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
+  const payer = document.getElementById('settlePayer').value;
+  const receiver = document.getElementById('settleReceiver').value;
+  const amount = parseFloat(document.getElementById('settleAmount').value);
+  if (!payer) return showToast('Select who paid');
+  if (!receiver) return showToast('Select who received');
+  if (payer === receiver) return showToast('Payer and receiver must be different');
+  if (!amount || amount <= 0) return showToast('Enter a valid amount');
+  if (!confirm(`Record real payment:\n\n${payer} paid ${formatCurrency(amount)} to ${receiver}\n\nThis will update balances and recalculate settlements.\n\nProceed?`)) return;
+
+  const ts = new Date().toISOString();
+  // Real payment: loser returns money (reduces their debt), winner borrows (reduces their winnings)
+  data.transactions.push({ id: genId(), player: payer, type:'return', amount, timestamp: ts, isSettlement: true });
+  data.transactions.push({ id: genId(), player: receiver, type:'borrow', amount, timestamp: ts, isSettlement: true });
+
+  // Also log in settlements
+  if (!data.settlements) data.settlements = [];
+  data.settlements.push({
+    id: genId(),
+    from: payer,
+    to: receiver,
+    amount,
+    type: 'real',
+    timestamp: ts,
+    recordedBy: adminName || 'Unknown'
+  });
+  saveData();
+  logAdminAction(`Manual settlement: ${payer} paid ${formatCurrency(amount)} to ${receiver}`);
+
+  // Clear old mark-only settlements since balances changed
+  data.settlements = data.settlements.filter(s => s.type === 'real');
+  saveData();
+
+  document.getElementById('settleAmount').value = '';
+  renderSettlement();
+  renderPlayers();
+  renderHistory();
+  updateStats();
+  showToast(`🤝 ${payer} paid ${formatCurrency(amount)} to ${receiver} — balances updated`);
+};
 
 window.clearSettlements = function() {
   if (!canWrite()) return showToast('🔒 Admin access required');
@@ -1196,6 +1264,7 @@ window.clearSettlements = function() {
   saveData();
   logAdminAction('Cleared all settlement records');
   renderSettlement();
+  renderHistory();
   showToast('Settlements cleared');
 };
 
@@ -1223,7 +1292,7 @@ function renderStats() {
 
   // Build player stats array
   const playerData = data.players.map(p => {
-    const txns = data.transactions.filter(t => t.player === p.name);
+    const txns = data.transactions.filter(t => t.player === p.name && !t.isSettlement);
     const borrows = txns.filter(t => t.type === 'borrow');
     const returns = txns.filter(t => t.type === 'return');
     const totalBorrowed = borrows.reduce((s,t) => s + t.amount, 0);
