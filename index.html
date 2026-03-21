@@ -351,7 +351,6 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
           <button class="btn btn-outline btn-sm" onclick="document.getElementById('sessionDateFilter').value='';renderSessionView()">All Dates</button>
         </div>
       </div>
-      <div id="sessionDateList" style="margin-bottom:12px"></div>
       <div style="overflow-x:auto" id="sessionTableWrap"></div>
     </div>
   </div>
@@ -422,8 +421,10 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
       </div>
       <div class="input-row">
         <input type="number" id="settleAmount" placeholder="Amount (€)" min="0.01" step="0.01">
+        <input type="date" id="settleDate" style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.85rem;font-family:inherit;color-scheme:dark">
         <button class="btn btn-primary" onclick="recordManualSettlement()">🤝 Record</button>
       </div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">Leave date empty for today, or pick a past date.</div>
     </div>
     <div class="section" id="settleActionSection"></div>
   </div>
@@ -889,7 +890,6 @@ function populatePlayerPinSelect() {
 
 // ─── Poker Sessions (date-based view) ───
 function renderSessionView() {
-  const dateListEl = document.getElementById('sessionDateList');
   const tableWrap = document.getElementById('sessionTableWrap');
   if (!tableWrap) return;
 
@@ -901,20 +901,9 @@ function renderSessionView() {
   const allDates = [...new Set(gameTxns.map(t => new Date(t.timestamp).toDateString()))].sort((a,b) => new Date(b) - new Date(a));
 
   if (allDates.length === 0) {
-    dateListEl.innerHTML = '';
     tableWrap.innerHTML = '<div class="empty"><div class="icon">🃏</div><p>No poker sessions yet. Record borrows in the Actions tab to get started.</p></div>';
     return;
   }
-
-  // Show clickable date pills
-  dateListEl.innerHTML = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">' +
-    allDates.map(d => {
-      const dateObj = new Date(d);
-      const label = dateObj.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-      const isActive = filterDate === d;
-      const players = new Set(gameTxns.filter(t => new Date(t.timestamp).toDateString() === d).map(t => t.player)).size;
-      return `<button class="btn ${isActive ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="pickSessionDate('${dateObj.toISOString().split('T')[0]}')" style="font-size:0.78rem">${label} <span style="opacity:0.6">(${players})</span></button>`;
-    }).join('') + '</div>';
 
   // If no date selected, show summary of all sessions
   if (!filterDate) {
@@ -1330,18 +1319,18 @@ window.recordManualSettlement = function() {
   const payer = document.getElementById('settlePayer').value;
   const receiver = document.getElementById('settleReceiver').value;
   const amount = parseFloat(document.getElementById('settleAmount').value);
+  const dateVal = document.getElementById('settleDate').value;
   if (!payer) return showToast('Select who paid');
   if (!receiver) return showToast('Select who received');
   if (payer === receiver) return showToast('Payer and receiver must be different');
   if (!amount || amount <= 0) return showToast('Enter a valid amount');
-  if (!confirm(`Record real payment:\n\n${payer} paid ${formatCurrency(amount)} to ${receiver}\n\nThis will update balances and recalculate settlements.\n\nProceed?`)) return;
+  const dateLabel = dateVal ? ` on ${new Date(dateVal).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}` : '';
+  if (!confirm(`Record real payment:\n\n${payer} paid ${formatCurrency(amount)} to ${receiver}${dateLabel}\n\nThis will update balances and recalculate settlements.\n\nProceed?`)) return;
 
-  const ts = new Date().toISOString();
-  // Real payment: loser returns money (reduces their debt), winner borrows (reduces their winnings)
+  const ts = dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : new Date().toISOString();
   data.transactions.push({ id: genId(), player: payer, type:'return', amount, timestamp: ts, isSettlement: true });
   data.transactions.push({ id: genId(), player: receiver, type:'borrow', amount, timestamp: ts, isSettlement: true });
 
-  // Also log in settlements
   if (!data.settlements) data.settlements = [];
   data.settlements.push({
     id: genId(),
@@ -1353,18 +1342,18 @@ window.recordManualSettlement = function() {
     recordedBy: adminName || 'Unknown'
   });
   saveData();
-  logAdminAction(`Manual settlement: ${payer} paid ${formatCurrency(amount)} to ${receiver}`);
+  logAdminAction(`Manual settlement: ${payer} paid ${formatCurrency(amount)} to ${receiver}${dateLabel}`);
 
-  // Clear old mark-only settlements since balances changed
   data.settlements = data.settlements.filter(s => s.type === 'real');
   saveData();
 
   document.getElementById('settleAmount').value = '';
+  document.getElementById('settleDate').value = '';
   renderSettlement();
   renderPlayers();
   renderHistory();
   updateStats();
-  showToast(`🤝 ${payer} paid ${formatCurrency(amount)} to ${receiver} — balances updated`);
+  showToast(`🤝 ${payer} paid ${formatCurrency(amount)} to ${receiver}${dateLabel}`);
 };
 
 window.clearSettlements = function() {
