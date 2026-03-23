@@ -936,6 +936,7 @@ function renderSessionView() {
   const isAdm = isAdminAny();
   let html = '<table class="ptable"><thead><tr>';
   html += '<th>#</th><th>Player</th><th>Borrows</th><th>Borrowed</th><th>Returned</th><th>P/L</th>';
+  if (isAdm) html += '<th style="text-align:right"></th>';
   html += '</tr></thead><tbody>';
 
   let totalBorrowed = 0, totalReturned = 0;
@@ -957,7 +958,7 @@ function renderSessionView() {
     totalBorrowed += borrowed;
     totalReturned += returned;
     const canOffset = isAdm && Math.abs(profit) > 0;
-    const offsetBtn = canOffset ? ` <button class="btn btn-outline btn-sm" onclick="offsetBalanceOnDate('${p.name.replace(/'/g,"\\'")}','${dateFilter}')" style="font-size:0.65rem;padding:1px 6px">✂️</button>` : '';
+    const offsetBtn = canOffset ? ` <button class="btn btn-outline btn-sm" onclick="offsetBalanceOnDate('${p.name.replace(/'/g,"\\'")}','${filterDate}')" style="font-size:0.65rem;padding:1px 6px">✂️</button>` : '';
 
     html += `<tr${me ? ' class="pt-me"' : ''}>
       <td style="color:var(--text-muted)">${idx+1}</td>
@@ -965,8 +966,16 @@ function renderSessionView() {
       <td style="text-align:center">${borrows.length}</td>
       <td style="color:var(--red)">${formatCurrency(borrowed)}</td>
       <td style="color:var(--green)">${formatCurrency(returned)}</td>
-      <td class="pt-profit" style="color:${profitColor};font-weight:700">${profit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(profit))}${offsetBtn}</td>
-    </tr>`;
+      <td class="pt-profit" style="color:${profitColor};font-weight:700">${profit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(profit))}${offsetBtn}</td>`;
+    if (isAdm) {
+      const lastBorrow = borrows.length > 0 ? borrows[borrows.length - 1] : null;
+      const lastReturn = returns.length > 0 ? returns[returns.length - 1] : null;
+      let btns = '';
+      if (lastBorrow) btns += `<button class="btn btn-danger btn-sm" onclick="deleteTransaction('${lastBorrow.id}')" style="font-size:0.68rem;padding:2px 8px" title="Delete last buy-in">↩ Buy-in</button> `;
+      if (lastReturn) btns += `<button class="btn btn-danger btn-sm" onclick="deleteTransaction('${lastReturn.id}')" style="font-size:0.68rem;padding:2px 8px" title="Delete last return">↩ Return</button>`;
+      html += `<td style="text-align:right;white-space:nowrap">${btns}</td>`;
+    }
+    html += '</tr>';
 
     if (isAdm) playerDetails.push({ name: p.name, icon: p.icon || '🎰', txns: dayTxns });
   });
@@ -978,6 +987,7 @@ function renderSessionView() {
     <td style="color:var(--red);font-weight:700">${formatCurrency(totalBorrowed)}</td>
     <td style="color:var(--green);font-weight:700">${formatCurrency(totalReturned)}</td>
     <td style="color:${totalProfitColor};font-weight:700">${totalProfit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(totalProfit))}</td>
+    ${isAdm ? `<td style="text-align:right"><button class="btn btn-danger btn-sm" onclick="clearDayData('${filterDate}')" style="font-size:0.68rem;padding:2px 8px">🗑️ Clear Day</button></td>` : ''}
   </tr>`;
 
   html += '</tbody></table>';
