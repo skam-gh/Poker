@@ -112,8 +112,8 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 .h-amount { margin-left:auto; font-weight:700; font-size:0.9rem; }
 .h-amount.negative { color:var(--red); }
 .h-amount.positive { color:var(--green); }
-.delete-btn { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:0.8rem; opacity:0; transition:opacity 0.2s; padding:2px 6px; }
-.history-item:hover .delete-btn { opacity:1; }
+.delete-btn { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:0.8rem; padding:2px 6px; }
+.delete-btn:hover { color:var(--red); }
 .delete-btn:hover { color:var(--red); }
 
 /* Settlement */
@@ -941,9 +941,12 @@ function renderSessionView() {
   let totalBorrowed = 0, totalReturned = 0;
   const isMe = (name) => adminRole === 'player' && adminName === name;
 
+  // Collect per-player transaction data for detail section
+  const playerDetails = [];
+
   data.players.forEach((p, idx) => {
     const dayTxns = gameTxns.filter(t => t.player === p.name && new Date(t.timestamp).toDateString() === filterDate);
-    if (dayTxns.length === 0) return; // Only show players who played this day
+    if (dayTxns.length === 0) return;
     const borrows = dayTxns.filter(t => t.type === 'borrow');
     const returns = dayTxns.filter(t => t.type === 'return');
     const borrowed = borrows.reduce((s,t) => s + t.amount, 0);
@@ -964,37 +967,46 @@ function renderSessionView() {
       <td style="color:var(--green)">${formatCurrency(returned)}</td>
       <td class="pt-profit" style="color:${profitColor};font-weight:700">${profit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(profit))}${offsetBtn}</td>
     </tr>`;
-    // Show individual transactions with delete buttons for admin
-    if (isAdm && dayTxns.length > 0) {
-      html += `<tr><td colspan="6" style="padding:2px 12px 10px 40px">
-        <div style="display:flex;flex-wrap:wrap;gap:4px">`;
-      dayTxns.forEach(t => {
-        const isBorrow = t.type === 'borrow';
-        const bg = isBorrow ? 'rgba(248,113,113,0.1)' : 'rgba(16,185,129,0.1)';
-        const color = isBorrow ? 'var(--red)' : 'var(--green)';
-        const label = isBorrow ? '↓ Buy-in' : '↑ Return';
-        html += `<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:${bg};border-radius:var(--radius-sm);font-size:0.78rem;border:1px solid ${color}22">
-          <span style="color:${color};font-weight:600">${label} ${formatCurrency(t.amount)}</span>
-          <button onclick="deleteTransaction('${t.id}')" title="Delete" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.85rem;padding:0 2px;font-weight:700">✕</button>
-        </div>`;
-      });
-      html += `</div></td></tr>`;
-    }
+
+    if (isAdm) playerDetails.push({ name: p.name, icon: p.icon || '🎰', txns: dayTxns });
   });
 
   const totalProfit = totalReturned - totalBorrowed;
   const totalProfitColor = totalProfit > 0 ? 'var(--green)' : totalProfit < 0 ? 'var(--red)' : 'var(--text-dim)';
-  const totalCanOffset = isAdm && Math.abs(totalProfit) > 0;
-  const totalOffsetBtn = totalCanOffset ? ` <button class="btn btn-outline btn-sm" onclick="offsetDayTotal('${filterDate}','${dateFilter || toLocalDateStr(new Date())}')" style="font-size:0.65rem;padding:1px 6px">✂️ Offset</button>` : '';
   html += `<tr style="border-top:2px solid var(--border)">
     <td></td><td style="font-weight:700;color:var(--text-dim)">TOTAL</td><td></td>
     <td style="color:var(--red);font-weight:700">${formatCurrency(totalBorrowed)}</td>
     <td style="color:var(--green);font-weight:700">${formatCurrency(totalReturned)}</td>
-    <td style="color:${totalProfitColor};font-weight:700">${totalProfit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(totalProfit))}${totalOffsetBtn}</td>
+    <td style="color:${totalProfitColor};font-weight:700">${totalProfit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(totalProfit))}</td>
   </tr>`;
 
   html += '</tbody></table>';
   html += `<div style="text-align:center;margin-top:10px;font-size:0.8rem;color:var(--text-muted)">${new Date(dateFilter).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>`;
+
+  // Admin: show transaction details per player with delete buttons
+  if (isAdm && playerDetails.length > 0) {
+    html += '<div style="margin-top:16px;padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">';
+    html += '<div style="font-size:0.85rem;font-weight:600;color:var(--text-dim);margin-bottom:10px">📝 Transaction Details — tap ✕ to delete</div>';
+    playerDetails.forEach(pd => {
+      html += `<div style="margin-bottom:10px"><div style="font-weight:600;font-size:0.85rem;margin-bottom:4px">${pd.icon} ${pd.name}</div><div style="display:flex;flex-wrap:wrap;gap:4px">`;
+      pd.txns.forEach(t => {
+        const isBorrow = t.type === 'borrow';
+        const bg = isBorrow ? 'rgba(248,113,113,0.12)' : 'rgba(16,185,129,0.12)';
+        const color = isBorrow ? 'var(--red)' : 'var(--green)';
+        const label = isBorrow ? '↓ Buy-in' : '↑ Return';
+        html += `<div style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:${bg};border-radius:8px;font-size:0.8rem;border:1px solid ${color}33">
+          <span style="color:${color};font-weight:600">${label} ${formatCurrency(t.amount)}</span>
+          <button onclick="deleteTransaction('${t.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem;padding:0 2px;font-weight:700;line-height:1" title="Delete">✕</button>
+        </div>`;
+      });
+      html += '</div></div>';
+    });
+    // Clear entire day button
+    html += `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);text-align:center">
+      <button class="btn btn-danger btn-sm" onclick="clearDayData('${dateFilter}')" style="padding:8px 20px">🗑️ Clear All Data for This Day</button>
+    </div>`;
+    html += '</div>';
+  }
 
   // Show offsets for this day
   const dayOffsets = data.transactions.filter(t => t.isOffset && new Date(t.timestamp).toDateString() === filterDate);
@@ -1021,6 +1033,27 @@ window.pickSessionDate = function(dateStr) {
   if (el) el.value = dateStr;
   renderSessionView();
 };
+
+window.clearDayData = function(dateStr) {
+  if (!canWrite()) return showToast('🔒 Admin access required');
+  const dayTxns = data.transactions.filter(t => !t.isSettlement && new Date(t.timestamp).toDateString() === dateStr);
+  if (dayTxns.length === 0) return showToast('No data for this day');
+  const dateLabel = new Date(dateStr).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  if (!confirm(`Delete ALL ${dayTxns.length} transactions for ${dateLabel}?\n\nThis includes all borrows, returns, and offsets for this day.\n\nThis cannot be undone!`)) return;
+  requirePinConfirm('Confirm Clear Day Data', () => {
+    const ids = new Set(dayTxns.map(t => t.id));
+    data.transactions = data.transactions.filter(t => !ids.has(t.id));
+    saveData();
+    logAdminAction(`Cleared all data for ${dateLabel} (${dayTxns.length} transactions)`);
+    renderSessionView();
+    renderPlayers();
+    renderHistory();
+    renderSettlement();
+    updateStats();
+    showToast(`🗑️ Cleared ${dayTxns.length} transactions for ${dateLabel}`);
+  });
+};
+
 window.renderSessionView = renderSessionView;
 
 // ─── Actions (Bulk Entry) ───
