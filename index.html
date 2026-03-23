@@ -964,6 +964,20 @@ function renderSessionView() {
       <td style="color:var(--green)">${formatCurrency(returned)}</td>
       <td class="pt-profit" style="color:${profitColor};font-weight:700">${profit >= 0 ? '+' : '-'}${formatCurrency(Math.abs(profit))}${offsetBtn}</td>
     </tr>`;
+    // Show individual transactions with delete buttons for admin
+    if (isAdm && dayTxns.length > 0) {
+      html += `<tr><td colspan="6" style="padding:0 12px 8px 40px">`;
+      dayTxns.forEach(t => {
+        const typeColor = t.type === 'borrow' ? 'var(--red)' : 'var(--green)';
+        const typeLabel = t.type === 'borrow' ? '↓ Borrow' : '↑ Return';
+        html += `<div style="display:inline-flex;align-items:center;gap:6px;margin:2px 8px 2px 0;font-size:0.78rem">
+          <span style="color:${typeColor}">${typeLabel}</span>
+          <span style="font-weight:600">${formatCurrency(t.amount)}</span>
+          <button class="delete-btn" onclick="deleteTransaction('${t.id}')" title="Delete this entry" style="font-size:0.7rem;padding:1px 4px">✕</button>
+        </div>`;
+      });
+      html += `</td></tr>`;
+    }
   });
 
   const totalProfit = totalReturned - totalBorrowed;
@@ -1186,6 +1200,8 @@ function deleteTransaction(id) {
     saveData();
     renderHistory();
     renderPlayers();
+    renderSessionView();
+    renderSettlement();
     updateStats();
     if (t) logAdminAction(`Deleted ${t.type} of ${formatCurrency(t.amount)} by ${t.player}`);
     showToast('Transaction deleted');
