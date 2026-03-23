@@ -966,17 +966,19 @@ function renderSessionView() {
     </tr>`;
     // Show individual transactions with delete buttons for admin
     if (isAdm && dayTxns.length > 0) {
-      html += `<tr><td colspan="6" style="padding:0 12px 8px 40px">`;
+      html += `<tr><td colspan="6" style="padding:2px 12px 10px 40px">
+        <div style="display:flex;flex-wrap:wrap;gap:4px">`;
       dayTxns.forEach(t => {
-        const typeColor = t.type === 'borrow' ? 'var(--red)' : 'var(--green)';
-        const typeLabel = t.type === 'borrow' ? '↓ Borrow' : '↑ Return';
-        html += `<div style="display:inline-flex;align-items:center;gap:6px;margin:2px 8px 2px 0;font-size:0.78rem">
-          <span style="color:${typeColor}">${typeLabel}</span>
-          <span style="font-weight:600">${formatCurrency(t.amount)}</span>
-          <button class="delete-btn" onclick="deleteTransaction('${t.id}')" title="Delete this entry" style="font-size:0.7rem;padding:1px 4px">✕</button>
+        const isBorrow = t.type === 'borrow';
+        const bg = isBorrow ? 'rgba(248,113,113,0.1)' : 'rgba(16,185,129,0.1)';
+        const color = isBorrow ? 'var(--red)' : 'var(--green)';
+        const label = isBorrow ? '↓ Buy-in' : '↑ Return';
+        html += `<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:${bg};border-radius:var(--radius-sm);font-size:0.78rem;border:1px solid ${color}22">
+          <span style="color:${color};font-weight:600">${label} ${formatCurrency(t.amount)}</span>
+          <button onclick="deleteTransaction('${t.id}')" title="Delete" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.85rem;padding:0 2px;font-weight:700">✕</button>
         </div>`;
       });
-      html += `</td></tr>`;
+      html += `</div></td></tr>`;
     }
   });
 
