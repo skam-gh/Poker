@@ -2505,10 +2505,11 @@ function applyAccessControl() {
   // Hide add player button (owner/mod only)
   const addPlayerRow = document.getElementById('addPlayerRow');
   if (addPlayerRow) addPlayerRow.style.display = writeOk ? '' : 'none';
-  // Hide actions tab entirely (borrows/returns — owner/mod only)
-  const tabs = document.querySelectorAll('.tab');
-  tabs.forEach(t => {
-    if (t.textContent.includes('Actions')) t.style.display = writeOk ? '' : 'none';
+  // Hide write-only tabs for players (Actions tab)
+  document.querySelectorAll('.tab').forEach(t => {
+    const tabName = t.getAttribute('onclick') || '';
+    if (tabName.includes("'actions'")) t.style.display = writeOk ? '' : 'none';
+    if (tabName.includes("'admin'")) t.style.display = isOwner() ? '' : 'none';
   });
   // Hide clear all data button
   const clearBtn = document.querySelector('.clear-all');
@@ -2516,11 +2517,14 @@ function applyAccessControl() {
   // Hide import button (export is fine — read-only)
   const importBtn = document.querySelector('[onclick*="importFile"]');
   if (importBtn) importBtn.style.display = writeOk ? '' : 'none';
-  // Player PIN section: show only for logged-in players (not for admins, not before login)
+  // Player PIN section: show for players and non-admin logged-in users
   const pinSection = document.getElementById('playerPinSection');
-  if (pinSection) pinSection.style.display = isPlayerOnly() ? '' : 'none';
-  // If on actions tab but no write access, switch to players
-  if (!writeOk && document.getElementById('tab-actions').style.display !== 'none') {
+  if (pinSection) pinSection.style.display = loggedIn && !isAdminAny() ? '' : 'none';
+  // If on a restricted tab without access, redirect to players
+  if (!writeOk && document.getElementById('tab-actions')?.style.display !== 'none') {
+    switchTab('players');
+  }
+  if (!isOwner() && document.getElementById('tab-admin')?.style.display !== 'none') {
     switchTab('players');
   }
 }
