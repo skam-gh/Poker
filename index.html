@@ -1351,12 +1351,13 @@ function renderSettlement() {
     if (wCopy[twi].amount < 0.01) twi++;
   }
 
-  // Match settlements to transfers — find which transfers are already paid
-  // A settlement matches a transfer if from+to match and total settled amount covers the transfer
+  // Match ONLY quick-pay settlements (from the Paid button) against transfers
+  // Old/manual settlements don't affect the frozen transfer list
+  const quickSettlements = settlements.filter(s => s.type === 'quick');
   const settledPerPair = {};
-  settlements.forEach(s => {
-    const key = s.from + '→' + s.to;
-    settledPerPair[key] = (settledPerPair[key] || 0) + s.amount;
+  quickSettlements.forEach(s => {
+    const key = s.from + '→' + s.to + '→' + s.amount.toFixed(2);
+    settledPerPair[key] = true;
   });
 
   if (transfersSection) {
@@ -1367,9 +1368,8 @@ function renderSettlement() {
       let allSettled = true;
       let tHtml = '';
       transfers.forEach(t => {
-        const key = t.from + '→' + t.to;
-        const paidAmount = settledPerPair[key] || 0;
-        const isPaid = paidAmount >= t.amount - 0.01;
+        const key = t.from + '→' + t.to + '→' + t.amount.toFixed(2);
+        const isPaid = !!settledPerPair[key];
         if (!isPaid) allSettled = false;
         const rowStyle = isPaid ? ' style="opacity:0.4"' : '';
         const paidBadge = isPaid ? ' <span style="color:var(--green);font-size:0.78rem;font-weight:600">✓ Paid</span>' : '';
