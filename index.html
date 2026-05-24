@@ -408,7 +408,7 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
     </div>
     <div class="section" id="settleTransfersSection">
       <div class="section-title"><span class="icon">🤝</span> Who Pays Whom</div>
-      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Remaining transfers after accounting for payments already made. Click "Paid" when done.</p>
+      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Exact payments needed to settle all balances. Click "Paid" to record each payment.</p>
       <div id="settleTransfers"></div>
     </div>
     <div class="section" id="settleManualSection" style="display:none">
@@ -1322,47 +1322,74 @@ function renderSettlement() {
     </div>`;
   }).join('');
 
-  // "Who Pays Whom" — show unsettled players and let admin record payments
-  const stillOwes = remaining.filter(p => p.remaining < -0.01).sort((a,b) => a.remaining - b.remaining);
-  const stillOwed = remaining.filter(p => p.remaining > 0.01).sort((a,b) => b.remaining - a.remaining);
+  // "Who Pays Whom" — calculate from GAME balances (this list NEVER changes with settlements)
+  const gameLosers = gameBalances.filter(p => p.profit < -0.01).map(p => ({ name: p.name, icon: p.icon, amount: Math.round(Math.abs(p.profit) * 100) / 100 })).sort((a,b) => b.amount - a.amount);
+  const gameWinners = gameBalances.filter(p => p.profit > 0.01).map(p => ({ name: p.name, icon: p.icon, amount: Math.round(p.profit * 100) / 100 })).sort((a,b) => b.amount - a.amount);
+
+  // Handle imbalance
+  const totalLost = gameLosers.reduce((s,p) => s + p.amount, 0);
+  const totalWon = gameWinners.reduce((s,p) => s + p.amount, 0);
+  const imbalance = Math.round(Math.abs(totalLost - totalWon) * 100) / 100;
+  const lCopy = gameLosers.map(l => ({...l}));
+  const wCopy = gameWinners.map(w => ({...w}));
+  if (imbalance > 0.01) {
+    if (totalLost > totalWon) wCopy.push({ name: '🎰 Poker Box', icon: '', amount: imbalance, isBox: true });
+    else lCopy.push({ name: '🎰 Poker Box', icon: '', amount: imbalance, isBox: true });
+  }
+
+  // Calculate minimum transfers (FROZEN — same every time for same game data)
+  const transfers = [];
+  let tli = 0, twi = 0;
+  while (tli < lCopy.length && twi < wCopy.length) {
+    const amount = Math.round(Math.min(lCopy[tli].amount, wCopy[twi].amount) * 100) / 100;
+    if (amount > 0.01) {
+      transfers.push({ from: lCopy[tli].name, fromIcon: lCopy[tli].icon, to: wCopy[twi].name, toIcon: wCopy[twi].icon, amount, isBox: lCopy[tli].isBox || wCopy[twi].isBox });
+    }
+    lCopy[tli].amount = Math.round((lCopy[tli].amount - amount) * 100) / 100;
+    wCopy[twi].amount = Math.round((wCopy[twi].amount - amount) * 100) / 100;
+    if (lCopy[tli].amount < 0.01) tli++;
+    if (wCopy[twi].amount < 0.01) twi++;
+  }
+
+  // Match settlements to transfers — find which transfers are already paid
+  // A settlement matches a transfer if from+to match and total settled amount covers the transfer
+  const settledPerPair = {};
+  settlements.forEach(s => {
+    const key = s.from + '→' + s.to;
+    settledPerPair[key] = (settledPerPair[key] || 0) + s.amount;
+  });
 
   if (transfersSection) {
-    if (stillOwes.length === 0 && stillOwed.length === 0) {
-      if (settlements.length > 0) {
-        transfersSection.style.display = '';
-        transfersDiv.innerHTML = `<div style="text-align:center;padding:12px;background:rgba(16,185,129,0.1);border-radius:var(--radius-sm);color:var(--green);font-weight:600">🎉 All settled!</div>
-          ${isAdm ? '<div style="text-align:center;margin-top:8px"><button class="btn btn-outline btn-sm" onclick="clearSettlements()">🔄 Reset Settlements</button></div>' : ''}`;
-      } else {
-        transfersSection.style.display = gameBalances.some(p => Math.abs(p.profit) > 0.01) ? '' : 'none';
-        transfersDiv.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem">No outstanding balances.</p>';
-      }
+    if (transfers.length === 0) {
+      transfersSection.style.display = 'none';
     } else {
       transfersSection.style.display = '';
+      let allSettled = true;
       let tHtml = '';
-      // Show who still needs to pay
-      if (stillOwes.length > 0) {
-        tHtml += '<div style="margin-bottom:10px;font-size:0.82rem;font-weight:600;color:var(--red)">💸 Need to pay:</div>';
-        stillOwes.forEach(p => {
-          const amt = Math.abs(p.remaining);
-          tHtml += `<div class="transfer-row">
-            <span style="font-weight:600;color:var(--red)">${p.icon} ${p.name}</span>
-            <span class="transfer-amount" style="color:var(--red)">owes ${formatCurrency(amt)}</span>
-            ${isAdm ? `<button class="btn btn-outline btn-sm" onclick="showPayModal('${p.name.replace(/'/g,"\\'")}')" style="font-size:0.75rem">🤝 Record Payment</button>` : ''}
-          </div>`;
-        });
+      transfers.forEach(t => {
+        const key = t.from + '→' + t.to;
+        const paidAmount = settledPerPair[key] || 0;
+        const isPaid = paidAmount >= t.amount - 0.01;
+        if (!isPaid) allSettled = false;
+        const rowStyle = isPaid ? ' style="opacity:0.4"' : '';
+        const paidBadge = isPaid ? ' <span style="color:var(--green);font-size:0.78rem;font-weight:600">✓ Paid</span>' : '';
+        const paidBtn = isAdm && !isPaid && !t.isBox ? ` <button class="btn btn-outline btn-sm" onclick="quickPay('${t.from.replace(/'/g,"\\'")}','${t.to.replace(/'/g,"\\'")}',${t.amount.toFixed(2)})">🤝 Paid</button>` : '';
+        tHtml += `<div class="transfer-row"${rowStyle}>
+          <span style="font-weight:600;color:var(--red)">${t.fromIcon} ${t.from}</span>
+          <span class="transfer-arrow">→ pays →</span>
+          <span style="font-weight:600;color:var(--green)">${t.toIcon} ${t.to}</span>
+          <span class="transfer-amount">${formatCurrency(t.amount)}</span>
+          ${paidBadge}${paidBtn}
+        </div>`;
+      });
+      if (imbalance > 0.01) {
+        tHtml += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:8px">⚠ Imbalance of ${formatCurrency(imbalance)} — some players may not have returned chips yet.</div>`;
       }
-      // Show who is still owed
-      if (stillOwed.length > 0) {
-        tHtml += '<div style="margin-bottom:10px;margin-top:14px;font-size:0.82rem;font-weight:600;color:var(--green)">💰 Still owed:</div>';
-        stillOwed.forEach(p => {
-          tHtml += `<div class="transfer-row">
-            <span style="font-weight:600;color:var(--green)">${p.icon} ${p.name}</span>
-            <span class="transfer-amount" style="color:var(--green)">+${formatCurrency(p.remaining)}</span>
-          </div>`;
-        });
+      if (allSettled) {
+        tHtml += `<div style="text-align:center;padding:16px;margin-top:10px;background:rgba(16,185,129,0.1);border-radius:var(--radius-sm);color:var(--green);font-weight:600;font-size:1rem">🎉 All settled!</div>`;
       }
       if (isAdm && settlements.length > 0) {
-        tHtml += `<div style="text-align:center;margin-top:12px"><button class="btn btn-outline btn-sm" onclick="clearSettlements()">🔄 Reset Settlements</button></div>`;
+        tHtml += `<div style="text-align:center;margin-top:8px"><button class="btn btn-outline btn-sm" onclick="clearSettlements()">🔄 Reset Settlements</button></div>`;
       }
       transfersDiv.innerHTML = tHtml;
     }
@@ -1412,16 +1439,25 @@ function renderSettlement() {
   }
 }
 
-// Quick pay from "Record Payment" button next to a loser
-window.showPayModal = function(payerName) {
+// One-click settle from transfer row
+window.quickPay = function(fromName, toName, amount) {
   if (!canWrite()) return showToast('🔒 Admin access required');
-  // Pre-fill the manual settlement form
-  const payerSel = document.getElementById('settlePayer');
-  const receiverSel = document.getElementById('settleReceiver');
-  if (payerSel) payerSel.value = payerName;
-  // Scroll to the manual form
-  const manualSection = document.getElementById('settleManualSection');
-  if (manualSection) manualSection.scrollIntoView({ behavior: 'smooth' });
+  if (!confirm(`${fromName} paid ${formatCurrency(amount)} to ${toName}?\n\nRecord this payment?`)) return;
+  if (!data.settlements) data.settlements = [];
+  data.settlements.push({
+    id: genId(),
+    from: fromName,
+    to: toName,
+    amount,
+    type: 'quick',
+    timestamp: new Date().toISOString(),
+    recordedBy: adminName || 'Unknown'
+  });
+  saveData();
+  logAdminAction(`Settlement: ${fromName} paid ${formatCurrency(amount)} to ${toName}`);
+  renderSettlement();
+  renderHistory();
+  showToast(`🤝 ${fromName} paid ${formatCurrency(amount)} to ${toName}`);
 };
 
 // Manual settlement — records payment without creating borrow/return transactions
