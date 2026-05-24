@@ -1299,15 +1299,21 @@ function renderSettlement() {
   const gameLosers = gameBalances.filter(p => p.profit < -0.01).map(p => ({ name: p.name, icon: p.icon, amount: Math.round(Math.abs(p.profit) * 100) / 100 })).sort((a,b) => b.amount - a.amount);
   const gameWinners = gameBalances.filter(p => p.profit > 0.01).map(p => ({ name: p.name, icon: p.icon, amount: Math.round(p.profit * 100) / 100 })).sort((a,b) => b.amount - a.amount);
 
-  // Handle imbalance
+  // Handle imbalance — instead of poker box, show admin option to deduct from top winner
   const totalLost = gameLosers.reduce((s,p) => s + p.amount, 0);
   const totalWon = gameWinners.reduce((s,p) => s + p.amount, 0);
   const imbalance = Math.round(Math.abs(totalLost - totalWon) * 100) / 100;
+
   const lCopy = gameLosers.map(l => ({...l}));
   const wCopy = gameWinners.map(w => ({...w}));
-  if (imbalance > 0.01) {
-    if (totalLost > totalWon) wCopy.push({ name: '🎰 Poker Box', icon: '', amount: imbalance, isBox: true });
-    else lCopy.push({ name: '🎰 Poker Box', icon: '', amount: imbalance, isBox: true });
+
+  // If there's an imbalance, deduct from top winner so transfers balance out
+  if (imbalance > 0.01 && wCopy.length > 0 && totalLost > totalWon) {
+    // Losers owe more — reduce top winner's amount so they absorb the difference
+    wCopy[0] = { ...wCopy[0], amount: wCopy[0].amount + imbalance, absorbedImbalance: imbalance };
+  } else if (imbalance > 0.01 && lCopy.length > 0 && totalWon > totalLost) {
+    // Winners won more — reduce top loser's debt
+    lCopy[0] = { ...lCopy[0], amount: lCopy[0].amount + imbalance, absorbedImbalance: imbalance };
   }
 
   // Calculate minimum transfers (FROZEN — same every time for same game data)
@@ -1316,7 +1322,7 @@ function renderSettlement() {
   while (tli < lCopy.length && twi < wCopy.length) {
     const amount = Math.round(Math.min(lCopy[tli].amount, wCopy[twi].amount) * 100) / 100;
     if (amount > 0.01) {
-      transfers.push({ from: lCopy[tli].name, fromIcon: lCopy[tli].icon, to: wCopy[twi].name, toIcon: wCopy[twi].icon, amount, isBox: lCopy[tli].isBox || wCopy[twi].isBox });
+      transfers.push({ from: lCopy[tli].name, fromIcon: lCopy[tli].icon, to: wCopy[twi].name, toIcon: wCopy[twi].icon, amount });
     }
     lCopy[tli].amount = Math.round((lCopy[tli].amount - amount) * 100) / 100;
     wCopy[twi].amount = Math.round((wCopy[twi].amount - amount) * 100) / 100;
@@ -1346,7 +1352,7 @@ function renderSettlement() {
         if (!isPaid) allSettled = false;
         const rowStyle = isPaid ? ' style="opacity:0.4"' : '';
         const paidBadge = isPaid ? ' <span style="color:var(--green);font-size:0.78rem;font-weight:600">✓ Paid</span>' : '';
-        const paidBtn = isAdm && !isPaid && !t.isBox ? ` <button class="btn btn-outline btn-sm" onclick="quickPay('${t.from.replace(/'/g,"\\'")}','${t.to.replace(/'/g,"\\'")}',${t.amount.toFixed(2)})">🤝 Paid</button>` : '';
+        const paidBtn = isAdm && !isPaid ? ` <button class="btn btn-outline btn-sm" onclick="quickPay('${t.from.replace(/'/g,"\\'")}','${t.to.replace(/'/g,"\\'")}',${t.amount.toFixed(2)})">🤝 Paid</button>` : '';
         tHtml += `<div class="transfer-row"${rowStyle}>
           <span style="font-weight:600;color:var(--red)">${t.fromIcon} ${t.from}</span>
           <span class="transfer-arrow">→ pays →</span>
@@ -1356,7 +1362,11 @@ function renderSettlement() {
         </div>`;
       });
       if (imbalance > 0.01) {
-        tHtml += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:8px">⚠ Imbalance of ${formatCurrency(imbalance)} — some players may not have returned chips yet.</div>`;
+        const topWinner = gameWinners[0];
+        tHtml += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:10px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
+          ⚠ Imbalance of <strong>${formatCurrency(imbalance)}</strong> — deducted from top winner <strong>${topWinner ? topWinner.name : '?'}</strong>.
+          ${isAdm ? `<button class="btn btn-outline btn-sm" onclick="offsetBalance('${topWinner ? topWinner.name.replace(/'/g,"\\'") : ''}')" style="font-size:0.7rem;margin-left:8px">✂️ Offset to fix</button>` : ''}
+        </div>`;
       }
       if (allSettled) {
         tHtml += `<div style="text-align:center;padding:16px;margin-top:10px;background:rgba(16,185,129,0.1);border-radius:var(--radius-sm);color:var(--green);font-weight:600;font-size:1rem">🎉 All settled!</div>`;
