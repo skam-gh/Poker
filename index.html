@@ -427,6 +427,10 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
       <div class="section-title"><span class="icon">⚖️</span> Balances</div>
       <div class="settlement-grid" id="settlementGrid"></div>
     </div>
+    <div style="text-align:center;margin-top:8px">
+      <button class="btn btn-outline btn-sm" onclick="toggleFullSettlementHistory()" id="fullHistoryBtn">📋 Show All-Time Settlement History</button>
+    </div>
+    <div id="fullSettlementHistory" style="display:none"></div>
   </div>
 
   <!-- Tab: Admin -->
@@ -602,14 +606,10 @@ function ensureAdmin(d) {
   if (!d.settings) d.settings = {};
   if (d.settings.borrowLimit === undefined) d.settings.borrowLimit = 1;
   if (!d.settlements) d.settlements = [];
-  // Migration: remove ALL fake settlement transactions (old note-based AND new isSettlement-based)
-  if (!d._settlementMigrated2) {
-    d.transactions = d.transactions.filter(t => {
-      if (t.note && t.note.startsWith('Settlement')) return false;
-      if (t.isSettlement) return false;
-      return true;
-    });
-    d._settlementMigrated2 = true;
+  // One-time: set settlement cutoff to mark all old sessions as settled (before May 23, 2026)
+  if (!d._settlementCutoffSet) {
+    d.settlementCutoff = '2026-05-22T23:59:59.000Z';
+    d._settlementCutoffSet = true;
   }
   // Clean up any old localStorage keys from previous versions
   localStorage.removeItem('poker_owner_pin');
@@ -1268,59 +1268,32 @@ function renderSettlement() {
 
   const isAdm = isAdminAny();
 
-  // Build balances from GAME transactions + offsets (exclude only settlement transactions)
+  // Build balances from GAME transactions AFTER the settlement cutoff
+  // Old sessions before the cutoff are considered fully settled
+  const cutoff = data.settlementCutoff || null;
   const gameBalances = data.players.map(p => {
-    const txns = data.transactions.filter(t => t.player === p.name && !t.isSettlement);
+    const txns = data.transactions.filter(t => t.player === p.name && !t.isSettlement && (!cutoff || new Date(t.timestamp) > new Date(cutoff)));
     const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
     const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
     const profit = Math.round((totalReturned - totalBorrowed) * 100) / 100;
     return { name: p.name, icon: p.icon || '🎰', profit };
   });
 
-  const settlements = data.settlements || [];
+  // Only use settlements after the cutoff
+  const settlements = (data.settlements || []).filter(s => !cutoff || new Date(s.timestamp) > new Date(cutoff));
 
-  // Calculate per-player settlement totals (how much each person has paid/received)
-  const settledOut = {}; // how much each person has PAID out
-  const settledIn = {};  // how much each person has RECEIVED
-  settlements.forEach(s => {
-    settledOut[s.from] = (settledOut[s.from] || 0) + s.amount;
-    settledIn[s.to] = (settledIn[s.to] || 0) + s.amount;
-  });
-
-  // Remaining balance = game profit + settled_out - settled_in
-  // Loser (profit=-50): pays 50 out → remaining = -50 + 50 = 0 (settled)
-  // Winner (profit=+50): receives 50 in → remaining = +50 - 50 = 0 (settled)
-  const remaining = gameBalances.map(p => {
-    const out = settledOut[p.name] || 0;
-    const inAmt = settledIn[p.name] || 0;
-    const rem = Math.round((p.profit + out - inAmt) * 100) / 100;
-    return { ...p, gameProfit: p.profit, remaining: rem };
-  });
-
-  // Render balance summary — show game balance AND remaining
-  grid.innerHTML = remaining.map(p => {
-    let cls = 'clear', amtCls = 'zero';
-    let label;
-    if (Math.abs(p.remaining) < 0.01) {
-      label = p.gameProfit !== 0 ? 'Settled ✓' : '—';
-    } else if (p.remaining > 0) {
-      cls = 'overpaid'; amtCls = 'positive';
-      label = `Still owed +${formatCurrency(p.remaining)}`;
-    } else {
-      cls = 'owes'; amtCls = 'negative';
-      label = `Still owes ${formatCurrency(Math.abs(p.remaining))}`;
-    }
-    // Show game balance context
-    let gameLabel = '';
-    if (p.gameProfit > 0.01) gameLabel = `<span style="font-size:0.75rem;color:var(--text-muted);margin-left:4px">(won +${formatCurrency(p.gameProfit)})</span>`;
-    else if (p.gameProfit < -0.01) gameLabel = `<span style="font-size:0.75rem;color:var(--text-muted);margin-left:4px">(owes ${formatCurrency(Math.abs(p.gameProfit))})</span>`;
-    const canOffset = isAdm && Math.abs(p.gameProfit) > 0;
+  // Render balance summary for current settlement cycle
+  grid.innerHTML = gameBalances.map(p => {
+    let cls = 'clear', label = '—', amtCls = 'zero';
+    if (p.profit > 0.01) { cls = 'overpaid'; label = `Won +${formatCurrency(p.profit)}`; amtCls = 'positive'; }
+    else if (p.profit < -0.01) { cls = 'owes'; label = `Owes ${formatCurrency(Math.abs(p.profit))}`; amtCls = 'negative'; }
+    const canOffset = isAdm && Math.abs(p.profit) > 0;
     const offsetBtn = canOffset ? ` <button class="btn btn-outline btn-sm" onclick="offsetBalance('${p.name.replace(/'/g,"\\'")}')" style="font-size:0.7rem;padding:2px 8px">✂️</button>` : '';
     return `<div class="settle-row ${cls}">
-      <span class="settle-name">${p.icon} ${p.name}${gameLabel}</span>
+      <span class="settle-name">${p.icon} ${p.name}</span>
       <span style="display:flex;align-items:center;gap:6px"><span class="settle-amount ${amtCls}">${label}</span>${offsetBtn}</span>
     </div>`;
-  }).join('');
+  }).filter(row => !row.includes('—</span>')).join('') || '<p style="color:var(--text-dim);font-size:0.85rem">No unsettled balances.</p>';
 
   // "Who Pays Whom" — calculate from GAME balances (this list NEVER changes with settlements)
   const gameLosers = gameBalances.filter(p => p.profit < -0.01).map(p => ({ name: p.name, icon: p.icon, amount: Math.round(Math.abs(p.profit) * 100) / 100 })).sort((a,b) => b.amount - a.amount);
@@ -1497,13 +1470,48 @@ window.recordManualSettlement = function() {
 
 window.clearSettlements = function() {
   if (!canWrite()) return showToast('🔒 Admin access required');
-  if (!confirm('Clear all settlement records? (Game transactions are NOT affected)')) return;
-  data.settlements = [];
+  if (!confirm('Mark all current sessions as settled and start fresh?\n\nThis keeps all data but resets the settlement view to only show future sessions.')) return;
+  // Set cutoff to NOW — everything before this is considered settled
+  data.settlementCutoff = new Date().toISOString();
   saveData();
-  logAdminAction('Cleared all settlement records');
+  logAdminAction('Reset settlements — marked all previous sessions as settled');
   renderSettlement();
   renderHistory();
-  showToast('Settlements cleared');
+  showToast('✅ Previous sessions marked as settled. Fresh start!');
+};
+
+window.toggleFullSettlementHistory = function() {
+  const div = document.getElementById('fullSettlementHistory');
+  const btn = document.getElementById('fullHistoryBtn');
+  if (div.style.display === 'none') {
+    const allSettlements = data.settlements || [];
+    if (allSettlements.length === 0) {
+      div.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;padding:12px">No settlement history.</p>';
+    } else {
+      const totalPaid = allSettlements.reduce((s,p) => s + p.amount, 0);
+      let html = `<div class="section" style="margin-top:12px">
+        <div class="section-title"><span class="icon">📋</span> All-Time Settlement History</div>
+        <div style="margin-bottom:8px;font-size:0.82rem;color:var(--text-dim)">Total: <strong style="color:var(--accent)">${formatCurrency(totalPaid)}</strong> across ${allSettlements.length} payment(s)</div>`;
+      [...allSettlements].reverse().forEach(s => {
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:3px;font-size:0.82rem;flex-wrap:wrap">
+          <span>🤝</span>
+          <span style="color:var(--red);font-weight:600">${s.from}</span>
+          <span style="color:var(--text-dim)">paid</span>
+          <span style="font-weight:700;color:var(--accent)">${formatCurrency(s.amount)}</span>
+          <span style="color:var(--text-dim)">to</span>
+          <span style="color:var(--green);font-weight:600">${s.to}</span>
+          <span style="color:var(--text-muted);font-size:0.72rem;margin-left:auto">${formatDateTime(s.timestamp)}</span>
+        </div>`;
+      });
+      html += '</div>';
+      div.innerHTML = html;
+    }
+    div.style.display = '';
+    btn.textContent = '📋 Hide All-Time History';
+  } else {
+    div.style.display = 'none';
+    btn.textContent = '📋 Show All-Time Settlement History';
+  }
 };
 
 window.deleteSettlement = function(id) {
