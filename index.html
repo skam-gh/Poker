@@ -402,15 +402,12 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 
   <!-- Tab: Settlement -->
   <div id="tab-settlement" style="display:none">
-    <div class="section">
-      <div class="section-title"><span class="icon">⚖️</span> Balances</div>
-      <div class="settlement-grid" id="settlementGrid"></div>
-    </div>
     <div class="section" id="settleTransfersSection">
       <div class="section-title"><span class="icon">🤝</span> Who Pays Whom</div>
       <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Exact payments needed to settle all balances. Click "Paid" to record each payment.</p>
       <div id="settleTransfers"></div>
     </div>
+    <div class="section" id="settleActionSection"></div>
     <div class="section" id="settleManualSection" style="display:none">
       <div class="section-title"><span class="icon">💸</span> Record Payment Manually</div>
       <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Record a settlement that happened outside the suggested transfers.</p>
@@ -426,7 +423,10 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
       </div>
       <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">Leave date empty for today, or pick a past date.</div>
     </div>
-    <div class="section" id="settleActionSection"></div>
+    <div class="section">
+      <div class="section-title"><span class="icon">⚖️</span> Balances</div>
+      <div class="settlement-grid" id="settlementGrid"></div>
+    </div>
   </div>
 
   <!-- Tab: Admin -->
