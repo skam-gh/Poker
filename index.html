@@ -1285,9 +1285,20 @@ function renderSettlement() {
   }
 
   const allSettlements = data.settlements || [];
-  let allHtml = '';
+  
+  // Pre-compute total settlements per from→to pair (all post-cutoff)
+  const allPostCutoffSettlements = allSettlements.filter(s => !cutoff || new Date(s.timestamp) > new Date(cutoff));
+  const pairRemaining = {};
+  allPostCutoffSettlements.forEach(s => {
+    const key = s.from + '→' + s.to;
+    pairRemaining[key] = (pairRemaining[key] || 0) + s.amount;
+  });
 
-  sessionDates.forEach(sessionDate => {
+  // Process sessions oldest first (to consume settlement amounts in order)
+  const sessionsOldestFirst = [...sessionDates].reverse();
+  const sessionCards = {};
+
+  sessionsOldestFirst.forEach(sessionDate => {
     const dateLabel = new Date(sessionDate).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
 
     const sessionBalances = data.players.map(p => {
@@ -1308,10 +1319,17 @@ function renderSettlement() {
 
     const lC = losers.map(l => ({...l}));
     const wC = winners.map(w => ({...w}));
-    if (imbalance > 0.01 && wC.length > 0 && totalLost > totalWon) {
-      wC[0] = { ...wC[0], amount: wC[0].amount + imbalance };
-    } else if (imbalance > 0.01 && lC.length > 0 && totalWon > totalLost) {
-      lC[0] = { ...lC[0], amount: lC[0].amount + imbalance };
+    let imbalanceAbsorber = null;
+    if (imbalance > 0.01) {
+      if (totalLost > totalWon && lC.length > 0) {
+        // Losers owe more than winners won — reduce top loser's debt (they pay less)
+        lC[0] = { ...lC[0], amount: lC[0].amount - imbalance };
+        imbalanceAbsorber = lC[0].name;
+      } else if (totalWon > totalLost && wC.length > 0) {
+        // Winners won more than losers owe — reduce top winner's payout (they receive less)
+        wC[0] = { ...wC[0], amount: wC[0].amount - imbalance };
+        imbalanceAbsorber = wC[0].name;
+      }
     }
 
     const transfers = [];
@@ -1325,15 +1343,18 @@ function renderSettlement() {
       if (wC[wi].amount < 0.01) wi++;
     }
 
-    const sessionQuickPays = allSettlements.filter(s => s.type === 'quick' && new Date(s.timestamp).toDateString() === sessionDate);
-    const paidKeys = {};
-    sessionQuickPays.forEach(s => { paidKeys[s.from + '→' + s.to + '→' + s.amount.toFixed(2)] = true; });
-
+    // Check if each transfer is covered by remaining settlement amounts
     let sessionSettled = true;
     let tHtml = '';
     transfers.forEach(t => {
-      const key = t.from + '→' + t.to + '→' + t.amount.toFixed(2);
-      const isPaid = !!paidKeys[key];
+      const key = t.from + '→' + t.to;
+      const remaining = pairRemaining[key] || 0;
+      const isPaid = remaining >= t.amount - 0.01;
+      if (isPaid) {
+        pairRemaining[key] = Math.round((remaining - t.amount) * 100) / 100;
+      } else {
+        sessionSettled = false;
+      }
       if (!isPaid) sessionSettled = false;
       const rowStyle = isPaid ? ' style="opacity:0.4"' : '';
       const badge = isPaid ? ' <span style="color:var(--green);font-size:0.78rem;font-weight:600">✓ Paid</span>' : '';
@@ -1347,19 +1368,29 @@ function renderSettlement() {
       </div>`;
     });
 
-    if (imbalance > 0.01 && winners.length > 0) {
-      tHtml += `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px">⚠ Imbalance ${formatCurrency(imbalance)} deducted from ${winners[0].name}</div>`;
+    if (imbalance > 0.01 && imbalanceAbsorber) {
+      const absorbMsg = totalLost > totalWon 
+        ? `${imbalanceAbsorber}'s debt reduced by ${formatCurrency(imbalance)}`
+        : `${imbalanceAbsorber}'s payout reduced by ${formatCurrency(imbalance)}`;
+      tHtml += `<div style="font-size:0.78rem;color:var(--accent);margin-top:8px;padding:8px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:var(--radius-sm)">
+        ⚠ ${formatCurrency(imbalance)} imbalance — ${absorbMsg}
+        ${isAdm ? `<button class="btn btn-outline btn-sm" onclick="offsetBalanceOnDate('${imbalanceAbsorber.replace(/'/g,"\\'")}','${sessionDate}')" style="font-size:0.7rem;margin-left:8px">✂️ Offset to fix</button>` : ''}
+      </div>`;
     }
 
     if (sessionSettled) {
       tHtml += `<div style="text-align:center;padding:8px;margin-top:6px;background:rgba(16,185,129,0.1);border-radius:var(--radius-sm);color:var(--green);font-weight:600;font-size:0.9rem">✓ Session settled</div>`;
     }
 
-    allHtml += `<div style="margin-bottom:20px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
+    sessionCards[sessionDate] = `<div style="margin-bottom:20px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
       <div style="font-weight:700;font-size:0.95rem;margin-bottom:10px;color:var(--accent)">🃏 ${dateLabel}</div>
       ${tHtml}
     </div>`;
   });
+
+  // Display newest first
+  let allHtml = '';
+  sessionDates.forEach(d => { if (sessionCards[d]) allHtml += sessionCards[d]; });
 
   if (transfersSection) {
     transfersSection.style.display = '';
