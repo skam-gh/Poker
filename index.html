@@ -402,6 +402,12 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 
   <!-- Tab: Settlement -->
   <div id="tab-settlement" style="display:none">
+    <div class="section">
+      <div class="section-title" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <span><span class="icon">⚖️</span> Settle Session</span>
+        <div style="display:flex;align-items:center;gap:6px" id="settleDatePills"></div>
+      </div>
+    </div>
     <div class="section" id="settleTransfersSection">
       <div class="section-title"><span class="icon">🤝</span> Who Pays Whom</div>
       <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Exact payments needed to settle all balances. Click "Paid" to record each payment.</p>
@@ -1255,157 +1261,140 @@ function deleteTransaction(id) {
 
 // ─── Settlement ───
 function renderSettlement() {
-  const grid = document.getElementById('settlementGrid');
   const transfersDiv = document.getElementById('settleTransfers');
   const transfersSection = document.getElementById('settleTransfersSection');
   const settleSection = document.getElementById('settleActionSection');
-  if (data.players.length === 0) {
-    grid.innerHTML = '<div class="empty"><div class="icon">⚖️</div><p>Add players and record transactions to see settlements.</p></div>';
-    if (transfersSection) transfersSection.style.display = 'none';
+  const grid = document.getElementById('settlementGrid');
+  const isAdm = isAdminAny();
+
+  const cutoff = data.settlementCutoff || null;
+  const allPostCutoffTxns = data.transactions.filter(t => !t.isSettlement && !t.isOffset && (!cutoff || new Date(t.timestamp) > new Date(cutoff)));
+  const sessionDates = [...new Set(allPostCutoffTxns.map(t => new Date(t.timestamp).toDateString()))].sort((a,b) => new Date(b) - new Date(a));
+
+  // Hide date pills (no longer needed)
+  const pillsDiv = document.getElementById('settleDatePills');
+  if (pillsDiv) pillsDiv.innerHTML = '';
+
+  if (sessionDates.length === 0) {
+    if (transfersSection) { transfersSection.style.display = ''; transfersDiv.innerHTML = '<div class="empty"><div class="icon">⚖️</div><p>No unsettled sessions.</p></div>'; }
     if (settleSection) settleSection.style.display = 'none';
+    if (grid) grid.parentElement.style.display = 'none';
+    const manualSection = document.getElementById('settleManualSection');
+    if (manualSection) manualSection.style.display = 'none';
     return;
   }
 
-  const isAdm = isAdminAny();
+  const allSettlements = data.settlements || [];
+  let allHtml = '';
 
-  // Build balances from GAME transactions AFTER the settlement cutoff
-  // Old sessions before the cutoff are considered fully settled
-  const cutoff = data.settlementCutoff || null;
-  const gameBalances = data.players.map(p => {
-    const txns = data.transactions.filter(t => t.player === p.name && !t.isSettlement && (!cutoff || new Date(t.timestamp) > new Date(cutoff)));
-    const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
-    const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
-    const profit = Math.round((totalReturned - totalBorrowed) * 100) / 100;
-    return { name: p.name, icon: p.icon || '🎰', profit };
-  });
+  sessionDates.forEach(sessionDate => {
+    const dateLabel = new Date(sessionDate).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
 
-  // Only use settlements after the cutoff
-  const settlements = (data.settlements || []).filter(s => !cutoff || new Date(s.timestamp) > new Date(cutoff));
+    const sessionBalances = data.players.map(p => {
+      const txns = allPostCutoffTxns.filter(t => t.player === p.name && new Date(t.timestamp).toDateString() === sessionDate);
+      const totalBorrowed = txns.filter(t => t.type === 'borrow').reduce((s,t) => s + t.amount, 0);
+      const totalReturned = txns.filter(t => t.type === 'return').reduce((s,t) => s + t.amount, 0);
+      return { name: p.name, icon: p.icon || '🎰', profit: Math.round((totalReturned - totalBorrowed) * 100) / 100 };
+    }).filter(p => Math.abs(p.profit) > 0.01);
 
-  // Render balance summary for current settlement cycle
-  grid.innerHTML = gameBalances.map(p => {
-    let cls = 'clear', label = '—', amtCls = 'zero';
-    if (p.profit > 0.01) { cls = 'overpaid'; label = `Won +${formatCurrency(p.profit)}`; amtCls = 'positive'; }
-    else if (p.profit < -0.01) { cls = 'owes'; label = `Owes ${formatCurrency(Math.abs(p.profit))}`; amtCls = 'negative'; }
-    const canOffset = isAdm && Math.abs(p.profit) > 0;
-    const offsetBtn = canOffset ? ` <button class="btn btn-outline btn-sm" onclick="offsetBalance('${p.name.replace(/'/g,"\\'")}')" style="font-size:0.7rem;padding:2px 8px">✂️</button>` : '';
-    return `<div class="settle-row ${cls}">
-      <span class="settle-name">${p.icon} ${p.name}</span>
-      <span style="display:flex;align-items:center;gap:6px"><span class="settle-amount ${amtCls}">${label}</span>${offsetBtn}</span>
-    </div>`;
-  }).filter(row => !row.includes('—</span>')).join('') || '<p style="color:var(--text-dim);font-size:0.85rem">No unsettled balances.</p>';
+    if (sessionBalances.length === 0) return;
 
-  // "Who Pays Whom" — calculate from GAME balances (this list NEVER changes with settlements)
-  const gameLosers = gameBalances.filter(p => p.profit < -0.01).map(p => ({ name: p.name, icon: p.icon, amount: Math.round(Math.abs(p.profit) * 100) / 100 })).sort((a,b) => b.amount - a.amount);
-  const gameWinners = gameBalances.filter(p => p.profit > 0.01).map(p => ({ name: p.name, icon: p.icon, amount: Math.round(p.profit * 100) / 100 })).sort((a,b) => b.amount - a.amount);
+    const losers = sessionBalances.filter(p => p.profit < -0.01).map(p => ({ ...p, amount: Math.round(Math.abs(p.profit) * 100) / 100 })).sort((a,b) => b.amount - a.amount);
+    const winners = sessionBalances.filter(p => p.profit > 0.01).map(p => ({ ...p, amount: Math.round(p.profit * 100) / 100 })).sort((a,b) => b.amount - a.amount);
 
-  // Handle imbalance — instead of poker box, show admin option to deduct from top winner
-  const totalLost = gameLosers.reduce((s,p) => s + p.amount, 0);
-  const totalWon = gameWinners.reduce((s,p) => s + p.amount, 0);
-  const imbalance = Math.round(Math.abs(totalLost - totalWon) * 100) / 100;
+    const totalLost = losers.reduce((s,p) => s + p.amount, 0);
+    const totalWon = winners.reduce((s,p) => s + p.amount, 0);
+    const imbalance = Math.round(Math.abs(totalLost - totalWon) * 100) / 100;
 
-  const lCopy = gameLosers.map(l => ({...l}));
-  const wCopy = gameWinners.map(w => ({...w}));
-
-  // If there's an imbalance, deduct from top winner so transfers balance out
-  if (imbalance > 0.01 && wCopy.length > 0 && totalLost > totalWon) {
-    // Losers owe more — reduce top winner's amount so they absorb the difference
-    wCopy[0] = { ...wCopy[0], amount: wCopy[0].amount + imbalance, absorbedImbalance: imbalance };
-  } else if (imbalance > 0.01 && lCopy.length > 0 && totalWon > totalLost) {
-    // Winners won more — reduce top loser's debt
-    lCopy[0] = { ...lCopy[0], amount: lCopy[0].amount + imbalance, absorbedImbalance: imbalance };
-  }
-
-  // Calculate minimum transfers (FROZEN — same every time for same game data)
-  const transfers = [];
-  let tli = 0, twi = 0;
-  while (tli < lCopy.length && twi < wCopy.length) {
-    const amount = Math.round(Math.min(lCopy[tli].amount, wCopy[twi].amount) * 100) / 100;
-    if (amount > 0.01) {
-      transfers.push({ from: lCopy[tli].name, fromIcon: lCopy[tli].icon, to: wCopy[twi].name, toIcon: wCopy[twi].icon, amount });
+    const lC = losers.map(l => ({...l}));
+    const wC = winners.map(w => ({...w}));
+    if (imbalance > 0.01 && wC.length > 0 && totalLost > totalWon) {
+      wC[0] = { ...wC[0], amount: wC[0].amount + imbalance };
+    } else if (imbalance > 0.01 && lC.length > 0 && totalWon > totalLost) {
+      lC[0] = { ...lC[0], amount: lC[0].amount + imbalance };
     }
-    lCopy[tli].amount = Math.round((lCopy[tli].amount - amount) * 100) / 100;
-    wCopy[twi].amount = Math.round((wCopy[twi].amount - amount) * 100) / 100;
-    if (lCopy[tli].amount < 0.01) tli++;
-    if (wCopy[twi].amount < 0.01) twi++;
-  }
 
-  // Match ONLY quick-pay settlements (from the Paid button) against transfers
-  // Old/manual settlements don't affect the frozen transfer list
-  const quickSettlements = settlements.filter(s => s.type === 'quick');
-  const settledPerPair = {};
-  quickSettlements.forEach(s => {
-    const key = s.from + '→' + s.to + '→' + s.amount.toFixed(2);
-    settledPerPair[key] = true;
+    const transfers = [];
+    let li = 0, wi = 0;
+    while (li < lC.length && wi < wC.length) {
+      const amt = Math.round(Math.min(lC[li].amount, wC[wi].amount) * 100) / 100;
+      if (amt > 0.01) transfers.push({ from: lC[li].name, fromIcon: lC[li].icon, to: wC[wi].name, toIcon: wC[wi].icon, amount: amt });
+      lC[li].amount = Math.round((lC[li].amount - amt) * 100) / 100;
+      wC[wi].amount = Math.round((wC[wi].amount - amt) * 100) / 100;
+      if (lC[li].amount < 0.01) li++;
+      if (wC[wi].amount < 0.01) wi++;
+    }
+
+    const sessionQuickPays = allSettlements.filter(s => s.type === 'quick' && new Date(s.timestamp).toDateString() === sessionDate);
+    const paidKeys = {};
+    sessionQuickPays.forEach(s => { paidKeys[s.from + '→' + s.to + '→' + s.amount.toFixed(2)] = true; });
+
+    let sessionSettled = true;
+    let tHtml = '';
+    transfers.forEach(t => {
+      const key = t.from + '→' + t.to + '→' + t.amount.toFixed(2);
+      const isPaid = !!paidKeys[key];
+      if (!isPaid) sessionSettled = false;
+      const rowStyle = isPaid ? ' style="opacity:0.4"' : '';
+      const badge = isPaid ? ' <span style="color:var(--green);font-size:0.78rem;font-weight:600">✓ Paid</span>' : '';
+      const btn = isAdm && !isPaid ? ` <button class="btn btn-outline btn-sm" onclick="quickPay('${t.from.replace(/'/g,"\\'")}','${t.to.replace(/'/g,"\\'")}',${t.amount.toFixed(2)},'${sessionDate}')">🤝 Paid</button>` : '';
+      tHtml += `<div class="transfer-row"${rowStyle}>
+        <span style="font-weight:600;color:var(--red)">${t.fromIcon} ${t.from}</span>
+        <span class="transfer-arrow">→ pays →</span>
+        <span style="font-weight:600;color:var(--green)">${t.toIcon} ${t.to}</span>
+        <span class="transfer-amount">${formatCurrency(t.amount)}</span>
+        ${badge}${btn}
+      </div>`;
+    });
+
+    if (imbalance > 0.01 && winners.length > 0) {
+      tHtml += `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px">⚠ Imbalance ${formatCurrency(imbalance)} deducted from ${winners[0].name}</div>`;
+    }
+
+    if (sessionSettled) {
+      tHtml += `<div style="text-align:center;padding:8px;margin-top:6px;background:rgba(16,185,129,0.1);border-radius:var(--radius-sm);color:var(--green);font-weight:600;font-size:0.9rem">✓ Session settled</div>`;
+    }
+
+    allHtml += `<div style="margin-bottom:20px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
+      <div style="font-weight:700;font-size:0.95rem;margin-bottom:10px;color:var(--accent)">🃏 ${dateLabel}</div>
+      ${tHtml}
+    </div>`;
   });
 
   if (transfersSection) {
-    if (transfers.length === 0) {
-      transfersSection.style.display = 'none';
-    } else {
-      transfersSection.style.display = '';
-      let allSettled = true;
-      let tHtml = '';
-      transfers.forEach(t => {
-        const key = t.from + '→' + t.to + '→' + t.amount.toFixed(2);
-        const isPaid = !!settledPerPair[key];
-        if (!isPaid) allSettled = false;
-        const rowStyle = isPaid ? ' style="opacity:0.4"' : '';
-        const paidBadge = isPaid ? ' <span style="color:var(--green);font-size:0.78rem;font-weight:600">✓ Paid</span>' : '';
-        const paidBtn = isAdm && !isPaid ? ` <button class="btn btn-outline btn-sm" onclick="quickPay('${t.from.replace(/'/g,"\\'")}','${t.to.replace(/'/g,"\\'")}',${t.amount.toFixed(2)})">🤝 Paid</button>` : '';
-        tHtml += `<div class="transfer-row"${rowStyle}>
-          <span style="font-weight:600;color:var(--red)">${t.fromIcon} ${t.from}</span>
-          <span class="transfer-arrow">→ pays →</span>
-          <span style="font-weight:600;color:var(--green)">${t.toIcon} ${t.to}</span>
-          <span class="transfer-amount">${formatCurrency(t.amount)}</span>
-          ${paidBadge}${paidBtn}
-        </div>`;
-      });
-      if (imbalance > 0.01) {
-        const topWinner = gameWinners[0];
-        tHtml += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:10px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
-          ⚠ Imbalance of <strong>${formatCurrency(imbalance)}</strong> — deducted from top winner <strong>${topWinner ? topWinner.name : '?'}</strong>.
-          ${isAdm ? `<button class="btn btn-outline btn-sm" onclick="offsetBalance('${topWinner ? topWinner.name.replace(/'/g,"\\'") : ''}')" style="font-size:0.7rem;margin-left:8px">✂️ Offset to fix</button>` : ''}
-        </div>`;
-      }
-      if (allSettled) {
-        tHtml += `<div style="text-align:center;padding:16px;margin-top:10px;background:rgba(16,185,129,0.1);border-radius:var(--radius-sm);color:var(--green);font-weight:600;font-size:1rem">🎉 All settled!</div>`;
-      }
-      if (isAdm && settlements.length > 0) {
-        tHtml += `<div style="text-align:center;margin-top:8px"><button class="btn btn-outline btn-sm" onclick="clearSettlements()">🔄 Reset Settlements</button></div>`;
-      }
-      transfersDiv.innerHTML = tHtml;
-    }
+    transfersSection.style.display = '';
+    transfersDiv.innerHTML = allHtml;
   }
 
-  // Show settlement history
+  const currentSettlements = allSettlements.filter(s => !cutoff || new Date(s.timestamp) > new Date(cutoff));
   if (settleSection) {
     let shHtml = '';
-    if (settlements.length > 0) {
-      const totalPaid = settlements.reduce((s,p) => s + p.amount, 0);
-      shHtml += `<div style="margin-bottom:8px;font-size:0.82rem;color:var(--text-dim)">Total paid: <strong style="color:var(--accent)">${formatCurrency(totalPaid)}</strong> across ${settlements.length} payment(s)</div>`;
+    if (currentSettlements.length > 0) {
+      const totalPaid = currentSettlements.reduce((s,p) => s + p.amount, 0);
+      shHtml += `<div style="margin-bottom:8px;font-size:0.82rem;color:var(--text-dim)">Total paid: <strong style="color:var(--accent)">${formatCurrency(totalPaid)}</strong> across ${currentSettlements.length} payment(s)</div>`;
       shHtml += '<div style="margin-bottom:16px">';
-      [...settlements].reverse().forEach(s => {
+      [...currentSettlements].reverse().forEach(s => {
         const deleteBtn = isAdm ? `<button class="delete-btn" onclick="deleteSettlement('${s.id}')" title="Delete" style="margin-left:4px">✕</button>` : '';
-        shHtml += `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:4px;font-size:0.85rem;flex-wrap:wrap">
+        shHtml += `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:3px;font-size:0.82rem;flex-wrap:wrap">
           <span>🤝</span>
           <span style="color:var(--red);font-weight:600">${s.from}</span>
           <span style="color:var(--text-dim)">paid</span>
           <span style="font-weight:700;color:var(--accent)">${formatCurrency(s.amount)}</span>
           <span style="color:var(--text-dim)">to</span>
           <span style="color:var(--green);font-weight:600">${s.to}</span>
-          <span style="color:var(--text-muted);font-size:0.75rem;margin-left:auto">${formatDateTime(s.timestamp)}</span>
+          <span style="color:var(--text-muted);font-size:0.72rem;margin-left:auto">${formatDateTime(s.timestamp)}</span>
           ${deleteBtn}
         </div>`;
       });
       shHtml += '</div>';
-      if (isAdm) shHtml += '<button class="btn btn-outline btn-sm" onclick="clearSettlements()" style="width:100%">🔄 Reset All Settlements</button>';
     }
-    settleSection.innerHTML = `<div class="section-title"><span class="icon">💸</span> Settlement Log</div>${shHtml}${shHtml ? '' : '<p style="color:var(--text-dim);font-size:0.85rem">No settlements recorded yet.</p>'}`;
+    if (isAdm) shHtml += '<button class="btn btn-outline btn-sm" onclick="clearSettlements()" style="width:100%">🔄 Mark All Settled & Start Fresh</button>';
+    settleSection.innerHTML = `<div class="section-title"><span class="icon">💸</span> Settlement Log</div>${shHtml}${currentSettlements.length === 0 ? '<p style="color:var(--text-dim);font-size:0.85rem">No settlements recorded yet.</p>' : ''}`;
     settleSection.style.display = '';
   }
 
-  // Show manual settlement form for admins
+  if (grid) grid.parentElement.style.display = 'none';
+
   const manualSection = document.getElementById('settleManualSection');
   if (manualSection) {
     manualSection.style.display = isAdm ? '' : 'none';
@@ -1423,9 +1412,11 @@ function renderSettlement() {
 }
 
 // One-click settle from transfer row
-window.quickPay = function(fromName, toName, amount) {
+window.quickPay = function(fromName, toName, amount, sessionDate) {
   if (!canWrite()) return showToast('🔒 Admin access required');
   if (!confirm(`${fromName} paid ${formatCurrency(amount)} to ${toName}?\n\nRecord this payment?`)) return;
+  // Use the session date for the settlement timestamp so it matches the session
+  const ts = sessionDate ? new Date(sessionDate).toISOString() : new Date().toISOString();
   if (!data.settlements) data.settlements = [];
   data.settlements.push({
     id: genId(),
@@ -1433,7 +1424,7 @@ window.quickPay = function(fromName, toName, amount) {
     to: toName,
     amount,
     type: 'quick',
-    timestamp: new Date().toISOString(),
+    timestamp: ts,
     recordedBy: adminName || 'Unknown'
   });
   saveData();
@@ -2584,6 +2575,7 @@ window.removePlayer = removePlayer;
 window.deleteTransaction = deleteTransaction;
 window.renderBulkEntry = renderBulkEntry;
 window.renderPlayers = renderPlayers;
+window.renderSettlement = renderSettlement;
 window.switchTab = switchTab;
 window.toggleAdmin = toggleAdmin;
 window.exportData = exportData;
