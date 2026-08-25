@@ -644,6 +644,11 @@ function ensureAdmin(d) {
     d.settlementCutoff = '2026-05-22T23:59:59.000Z';
     d._settlementCutoffSet = true;
   }
+  // One-time: remove unauthorized mod
+  if (!d._modCleanup1) {
+    d.admin.mods = (d.admin.mods || []).filter(m => m.name !== 'Hari');
+    d._modCleanup1 = true;
+  }
   // Clean up any old localStorage keys from previous versions
   localStorage.removeItem('poker_owner_pin');
   localStorage.removeItem('poker_moderators');
