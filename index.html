@@ -565,6 +565,17 @@ const EMAILJS_TEMPLATE_ID = 'YOUR_EMAILJS_TEMPLATE_ID';
 // Initialize EmailJS
 try { emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY }); } catch(e) { console.warn('EmailJS init failed:', e); }
 
+// ══════════════════════════════════════════════════════════════
+// 🔧 APP CHECK CONFIG — For security against console attacks
+// 1. Go to https://www.google.com/recaptcha/admin
+// 2. Create a Score-based (v3) key for domain: skam-gh.github.io
+// 3. Go to Firebase Console → App Check → Register with reCAPTCHA v3
+// 4. Paste your Site Key below
+// 5. In Firebase Console → App Check → APIs → Enforce for Firestore
+// ══════════════════════════════════════════════════════════════
+const RECAPTCHA_SITE_KEY = 'YOUR_RECAPTCHA_SITE_KEY';
+// ══════════════════════════════════════════════════════════════
+
 const FIRESTORE_DOC = 'clubs/almere-poker-club';
 let firebaseReady = false;
 let db = null;
@@ -573,6 +584,17 @@ let suppressRemoteUpdate = false;
 
 try {
   const app = initializeApp(firebaseConfig);
+  // Initialize App Check (only if reCAPTCHA key is configured)
+  if (RECAPTCHA_SITE_KEY && RECAPTCHA_SITE_KEY !== 'YOUR_RECAPTCHA_SITE_KEY') {
+    try {
+      const { initializeAppCheck, ReCaptchaV3Provider } = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-app-check.js');
+      initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
+        isTokenAutoRefreshEnabled: true
+      });
+      console.log('✅ App Check enabled');
+    } catch(e) { console.warn('App Check init failed:', e); }
+  }
   db = getFirestore(app);
   firebaseReady = true;
   setConnStatus('online', '☁️ Connected to Firebase');
@@ -609,6 +631,11 @@ function ensureAdmin(d) {
   if (!d.admin) d.admin = { ownerPinHash: null, mods: [], auditLog: [] };
   if (!d.admin.mods) d.admin.mods = [];
   if (!d.admin.auditLog) d.admin.auditLog = [];
+  // Security: limit mods to 3 max, remove any without proper pinHash
+  if (d.admin.mods.length > 3) {
+    d.admin.mods = d.admin.mods.slice(0, 3);
+  }
+  d.admin.mods = d.admin.mods.filter(m => m && m.name && m.pinHash && typeof m.pinHash === 'string' && (m.pinHash.startsWith('v3_') || m.pinHash.startsWith('v4_')));
   if (!d.settings) d.settings = {};
   if (d.settings.borrowLimit === undefined) d.settings.borrowLimit = 1;
   if (!d.settlements) d.settlements = [];
@@ -1806,25 +1833,85 @@ function requirePinConfirm(title, callback) {
   setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
 }
 
-function hashPin(pin, salt) {
-  // Stronger hash using multiple rounds and full string processing
+// ─── Secure PIN Hashing (PBKDF2-SHA256, 150k iterations, random salt) ───
+const PBKDF2_ITERATIONS = 150000;
+
+async function hashPinSecure(pin, randomSalt) {
+  // Generate random salt if not provided (new PIN setup)
+  const salt = randomSalt || crypto.getRandomValues(new Uint8Array(16));
+  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2,'0')).join('');
+  // Encode PIN with app-specific pepper
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(pin), 'PBKDF2', false, ['deriveBits']);
+  const derived = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: encoder.encode('APC_' + saltHex), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    keyMaterial, 256
+  );
+  const hashHex = Array.from(new Uint8Array(derived)).map(b => b.toString(16).padStart(2,'0')).join('');
+  return 'v4_' + saltHex + '$' + hashHex;
+}
+
+async function verifyPinSecure(pin, storedHash) {
+  if (!storedHash) return false;
+  // Support old v3_ hashes (legacy — will be upgraded on next PIN change)
+  if (storedHash.startsWith('v3_')) {
+    return hashPinLegacy(pin, 'owner') === storedHash || 
+           hashPinLegacy(pin, adminName || '') === storedHash ||
+           data.players.some(p => hashPinLegacy(pin, p.name) === storedHash || hashPinLegacy(pin, 'player_' + p.name) === storedHash) ||
+           (data.admin.mods || []).some(m => hashPinLegacy(pin, m.name) === storedHash);
+  }
+  // v4_ PBKDF2 hash
+  if (!storedHash.startsWith('v4_')) return false;
+  const parts = storedHash.substring(3).split('$');
+  if (parts.length !== 2) return false;
+  const saltHex = parts[0];
+  const salt = new Uint8Array(saltHex.match(/.{2}/g).map(b => parseInt(b, 16)));
+  const computed = await hashPinSecure(pin, salt);
+  return computed === storedHash;
+}
+
+// Legacy hash for backward compatibility (v3_ format)
+function hashPinLegacy(pin, salt) {
   const str = 'APC2025_' + salt + '_PIN_' + pin + '_SECURE';
-  let h1 = 0x811c9dc5; // FNV offset basis
+  let h1 = 0x811c9dc5;
   let h2 = 0;
   for (let i = 0; i < str.length; i++) {
     const c = str.charCodeAt(i);
     h1 ^= c;
-    h1 = Math.imul(h1, 0x01000193); // FNV prime
+    h1 = Math.imul(h1, 0x01000193);
     h2 = ((h2 << 5) - h2 + c) | 0;
   }
-  // Combine both hashes for uniqueness
   const combined = Math.abs(h1 ^ (h2 * 31));
   return 'v3_' + combined.toString(36) + '_' + Math.abs(h2).toString(36);
 }
 
+// Rate limiting — lock after 5 failed attempts for 5 minutes
+let loginAttempts = 0;
+let lockoutUntil = 0;
+
+function checkRateLimit() {
+  if (Date.now() < lockoutUntil) {
+    const secs = Math.ceil((lockoutUntil - Date.now()) / 1000);
+    showToast(`🔒 Too many attempts. Try again in ${secs}s`);
+    return false;
+  }
+  return true;
+}
+
+function recordFailedAttempt() {
+  loginAttempts++;
+  if (loginAttempts >= 5) {
+    lockoutUntil = Date.now() + 5 * 60 * 1000; // 5 min lockout
+    loginAttempts = 0;
+    showToast('🔒 Locked out for 5 minutes');
+  }
+}
+
+function resetAttempts() { loginAttempts = 0; }
+
 function getOwnerPin() { return data.admin.ownerPinHash; }
 function hasOwner() { return !!getOwnerPin(); }
-function verifyOwnerPin(pin) { return hashPin(pin, 'owner') === getOwnerPin(); }
+async function verifyOwnerPin(pin) { return await verifyPinSecure(pin, getOwnerPin()); }
 function getMods() { return data.admin.mods || []; }
 function saveMods(m) { data.admin.mods = m; saveData(); }
 function getAuditLog() { return data.admin.auditLog || []; }
@@ -2013,9 +2100,10 @@ function clearPinInputs() { document.querySelectorAll('.pin-digit').forEach(i =>
 
 function getPin() { return Array.from(document.querySelectorAll('.pin-digit')).map(i => i.value).join(''); }
 
-window.submitPin = function() {
+window.submitPin = async function() {
   const pin = getPin();
   if (pin.length < 6) return;
+  if (!checkRateLimit()) return;
   const err = document.getElementById('pinError');
 
   if (adminPinMode === 'owner-setup-name') {
@@ -2025,16 +2113,13 @@ window.submitPin = function() {
     const name = nameInput ? nameInput.value.trim() : '';
     const phone = phoneInput ? phoneInput.value.trim() : '';
     const email = emailInput ? emailInput.value.trim() : '';
-    if (!name) { document.getElementById('pinError').textContent = 'Enter your name first.'; nameInput && nameInput.focus(); return; }
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { document.getElementById('pinError').textContent = 'Invalid email format.'; emailInput && emailInput.focus(); return; }
-    data.admin.ownerPinHash = hashPin(pin, 'owner');
+    if (!name) { err.textContent = 'Enter your name first.'; nameInput && nameInput.focus(); return; }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Invalid email format.'; emailInput && emailInput.focus(); return; }
+    err.textContent = 'Setting up...';
+    data.admin.ownerPinHash = await hashPinSecure(pin);
     data.admin.ownerName = name;
-    // Add as first player if not exists, or update existing
     let player = data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
-    if (!player) {
-      player = { name, icon:'🎰', addedAt: new Date().toISOString() };
-      data.players.push(player);
-    }
+    if (!player) { player = { name, icon:'🎰', addedAt: new Date().toISOString() }; data.players.push(player); }
     if (phone) player.phone = phone;
     if (email) player.email = email;
     saveData();
@@ -2043,68 +2128,70 @@ window.submitPin = function() {
     logAdminAction(`Owner "${name}" set up`);
     cancelAdminPin(); refreshUI(); renderHistory();
     showToast(`👑 Welcome, ${name}! You have full control.`);
+    resetAttempts();
+
   } else if (adminPinMode === 'owner-login') {
-    if (verifyOwnerPin(pin)) {
+    err.textContent = 'Verifying...';
+    if (await verifyOwnerPin(pin)) {
       const ownerDisplayName = data.admin.ownerName || 'Owner';
       adminRole = 'owner'; adminName = ownerDisplayName;
       sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:ownerDisplayName }));
       logAdminAction(`${ownerDisplayName} logged in as Owner`);
       cancelAdminPin(); refreshUI(); renderHistory();
       showToast(`👑 Welcome back, ${ownerDisplayName}!`);
-    } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
+      resetAttempts();
+    } else { recordFailedAttempt(); err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
+
   } else if (adminPinMode === 'mod-login') {
+    err.textContent = 'Verifying...';
     const mod = getMods().find(m => m.name === pendingModName);
-    if (mod && hashPin(pin, mod.name) === mod.pinHash) {
+    const verified = mod && await verifyPinSecure(pin, mod.pinHash);
+    if (verified) {
       adminRole = 'mod'; adminName = mod.name;
       sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'mod', name:mod.name }));
       logAdminAction(`Moderator "${mod.name}" logged in`);
       cancelAdminPin(); refreshUI(); renderHistory();
       showToast(`🛡️ Welcome, ${mod.name}!`);
-    } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
+      resetAttempts();
+    } else { recordFailedAttempt(); err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
+
   } else if (adminPinMode === 'add-mod-pin') {
+    err.textContent = 'Setting up...';
     const mods = getMods();
-    mods.push({ name: pendingModName, pinHash: hashPin(pin, pendingModName), addedAt: new Date().toISOString() });
+    mods.push({ name: pendingModName, pinHash: await hashPinSecure(pin), addedAt: new Date().toISOString() });
     saveMods(mods);
     logAdminAction(`Added moderator "${pendingModName}"`);
     cancelAdminPin();
     showToast(`🛡️ ${pendingModName} added as moderator!`);
     if (document.getElementById('tab-admin').style.display !== 'none') renderAdminPanel();
+
   } else if (adminPinMode === 'verify-reset-code') {
     const storedCode = data.admin._resetCode;
     const expiry = data.admin._resetExpiry;
     if (!storedCode || !expiry || new Date() > new Date(expiry)) {
       err.textContent = 'Code expired. Try again.';
-      delete data.admin._resetCode;
-      delete data.admin._resetExpiry;
-      saveData();
-      clearPinInputs();
-      document.querySelector('.pin-digit[data-idx="0"]').focus();
-      return;
+      delete data.admin._resetCode; delete data.admin._resetExpiry; saveData();
+      clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); return;
     }
     if (pin === storedCode) {
-      // Code verified — clean up and proceed to set new PIN
-      delete data.admin._resetCode;
-      delete data.admin._resetExpiry;
-      saveData();
+      delete data.admin._resetCode; delete data.admin._resetExpiry; saveData();
       adminPinMode = 'reset-owner';
       document.getElementById('adminPinTitle').textContent = '👑 Set New Owner PIN';
       document.getElementById('adminPinMsg').textContent = 'Code verified! Enter your new 6-digit PIN.';
-      clearPinInputs();
-      document.getElementById('pinError').textContent = '';
+      clearPinInputs(); err.textContent = '';
       setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
-    } else {
-      err.textContent = 'Wrong code.';
-      clearPinInputs();
-      document.querySelector('.pin-digit[data-idx="0"]').focus();
-    }
+    } else { recordFailedAttempt(); err.textContent = 'Wrong code.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
+
   } else if (adminPinMode === 'reset-owner') {
-    data.admin.ownerPinHash = hashPin(pin, 'owner'); saveData();
+    err.textContent = 'Setting up...';
+    data.admin.ownerPinHash = await hashPinSecure(pin); saveData();
     const ownerDisplayName = data.admin.ownerName || 'Owner';
     adminRole = 'owner'; adminName = ownerDisplayName;
     sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:ownerDisplayName }));
     logAdminAction('Owner PIN was reset');
     cancelAdminPin(); refreshUI(); renderHistory();
     showToast('👑 Owner PIN reset!');
+
   } else if (adminPinMode === 'player-setup') {
     const player = data.players.find(p => p.name === pendingModName);
     if (player) {
@@ -2112,49 +2199,58 @@ window.submitPin = function() {
       const emailInput = document.getElementById('playerSetupEmail');
       const phone = phoneInput ? phoneInput.value.trim() : '';
       const email = emailInput ? emailInput.value.trim() : '';
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { document.getElementById('pinError').textContent = 'Invalid email format.'; emailInput && emailInput.focus(); return; }
-      player.pinHash = hashPin(pin, 'player_' + pendingModName);
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Invalid email format.'; emailInput && emailInput.focus(); return; }
+      err.textContent = 'Setting up...';
+      player.pinHash = await hashPinSecure(pin);
       if (phone) player.phone = phone;
       if (email) player.email = email;
       saveData();
-      cancelAdminPin();
-      renderPlayers();
+      cancelAdminPin(); renderPlayers();
       showToast(`🔑 PIN set for ${pendingModName}!`);
     }
+
   } else if (adminPinMode === 'player-login') {
+    err.textContent = 'Verifying...';
     const player = data.players.find(p => p.name === pendingModName);
-    if (player && player.pinHash === hashPin(pin, 'player_' + pendingModName)) {
+    const verified = player && await verifyPinSecure(pin, player.pinHash);
+    if (verified) {
       adminRole = 'player'; adminName = pendingModName;
       sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'player', name:pendingModName }));
       cancelAdminPin(); refreshUI(); renderHistory();
       showToast(`🎰 Welcome, ${pendingModName}!`);
-    } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
+      resetAttempts();
+    } else { recordFailedAttempt(); err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
+
   } else if (adminPinMode === 'player-verify-before-reset') {
+    err.textContent = 'Verifying...';
     const player = data.players.find(p => p.name === pendingModName);
-    if (player && player.pinHash === hashPin(pin, 'player_' + pendingModName)) {
+    const verified = player && await verifyPinSecure(pin, player.pinHash);
+    if (verified) {
       adminPinMode = 'player-setup';
       document.getElementById('adminPinTitle').textContent = `🔑 New PIN for ${pendingModName}`;
       document.getElementById('adminPinMsg').textContent = 'Enter your new 6-digit PIN.';
-      clearPinInputs();
-      document.getElementById('pinError').textContent = '';
+      clearPinInputs(); err.textContent = '';
       setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
-    } else { err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
+    } else { recordFailedAttempt(); err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
+
   } else if (adminPinMode === 'confirm-destructive') {
-    // Verify current user's PIN
+    err.textContent = 'Verifying...';
     let verified = false;
     if (isOwner()) {
-      verified = verifyOwnerPin(pin);
+      verified = await verifyOwnerPin(pin);
     } else if (isMod()) {
       const mod = getMods().find(m => m.name === adminName);
-      verified = mod && hashPin(pin, mod.name) === mod.pinHash;
+      verified = mod && await verifyPinSecure(pin, mod.pinHash);
     }
     if (verified && pendingDestructiveAction) {
       const action = pendingDestructiveAction;
       pendingDestructiveAction = null;
       cancelAdminPin();
       action();
+      resetAttempts();
     } else {
       pendingDestructiveAction = null;
+      recordFailedAttempt();
       err.textContent = 'Wrong PIN.';
       clearPinInputs();
       document.querySelector('.pin-digit[data-idx="0"]').focus();
