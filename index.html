@@ -509,12 +509,10 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
     <div style="display:flex;flex-direction:column;gap:12px">
       <div>
         <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Name <span style="color:var(--red)">*</span></label>
-        <input type="text" id="apName" placeholder="Player name" maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none" onkeydown="if(event.key==='Enter')document.getElementById('apPhone').focus()">
+        <input type="text" id="apName" placeholder="Player name" maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none" onkeydown="if(event.key==='Enter')document.getElementById('apEmail').focus()">
       </div>
       <div>
-        <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Phone <span style="color:var(--text-muted)">(optional)</span></label>
-        <input type="tel" id="apPhone" placeholder="+31 6 1234 5678" maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none" onkeydown="if(event.key==='Enter')document.getElementById('apEmail').focus()">
-      </div>
+</div>
       <div>
         <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Email <span style="color:var(--text-muted)">(optional)</span></label>
         <input type="email" id="apEmail" placeholder="player@email.com" maxlength="50" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none" onkeydown="if(event.key==='Enter')addPlayer()">
@@ -644,13 +642,21 @@ function ensureAdmin(d) {
     d.settlementCutoff = '2026-05-22T23:59:59.000Z';
     d._settlementCutoffSet = true;
   }
-  // PERMANENT FIX: Force owner to Srikanth, remove Hari from everything (runs EVERY load)
+  // REBUILD: Start fresh — empty player list, owner adds players as needed
+  const requiredPlayers = [];
+  if (!d.players) d.players = [];
+  // PERMANENT FIX: Force owner to Srikanth, set owner email, remove Hari completely
   d.admin.ownerName = 'Srikanth';
+  d.admin.mods = (d.admin.mods || []).filter(m => m.name !== 'Hari');
+  // Remove Hari from players list entirely
+  d.players = d.players.filter(p => p.name !== 'Hari');
+  // Set owner email for PIN reset
+  const ownerRec = d.players.find(p => p.name === 'Srikanth');
+  if (ownerRec) ownerRec.email = 'vsramja@gmail.com';
   d.admin.mods = (d.admin.mods || []).filter(m => m.name !== 'Hari');
   // Remove Hari's email/phone from Srikanth's player record
   const ownerRec = (d.players || []).find(p => p.name === 'Srikanth');
   if (ownerRec && ownerRec.email && ownerRec.email.includes('srihari')) delete ownerRec.email;
-  if (ownerRec && ownerRec.phone && ownerRec.phone.includes('32970')) delete ownerRec.phone;
   // If first player is Hari, swap names
   if (d.players && d.players[0] && d.players[0].name === 'Hari') {
     // Find Srikanth elsewhere in the list
@@ -662,6 +668,8 @@ function ensureAdmin(d) {
       d.players[sriIdx] = temp;
     }
   }
+  // Remove phone numbers from all player records
+  (d.players || []).forEach(p => { delete p.phone; });
   // Clear any pending reset codes
   delete d.admin._resetCode;
   delete d.admin._resetExpiry;
@@ -732,26 +740,7 @@ async function loadFromCloud() {
   return null;
 }
 
-function listenToCloud() {
-  if (!firebaseReady || !db) return;
-  try {
-    unsubFirestore = onSnapshot(doc(db, ...FIRESTORE_DOC.split('/')), (snap) => {
-      if (suppressRemoteUpdate) return;
-      if (snap.exists()) {
-        const remote = snap.data();
-        if (remote.lastModified && data.lastModified && remote.lastModified > data.lastModified) {
-          data = remote;
-          ensureAdmin(data);
-          saveLocal();
-          refreshUI();
-          showToast('☁️ Data synced from cloud');
-        }
-      }
-    });
-  } catch(e) {
-    console.warn('Realtime listener failed:', e);
-  }
-}
+function listenToCloud() { /* disabled — inline listener with security checks */ }
 
 let data = loadLocal();
 
@@ -761,21 +750,7 @@ if (!data.players || data.players.length === 0) {
     version: '3.0',
     createdAt: '2026-03-14T12:00:00.000Z',
     players: [
-      { name:'Srikanth', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'Karan', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'Sanket', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'Rohit', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'Hari', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'Dheeraj', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'Shrikant', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'Sumeet', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'Rajeev', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'Surya', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'Mahesh', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'Rammohan', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'Ramashanker', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'SrinivasM', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
-      { name:'Shashi', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Srikanth', icon:'🎰', email:'vsramja@gmail.com', addedAt: new Date().toISOString() },
     ],
     transactions: [],
     settlements: [],
@@ -794,27 +769,30 @@ if (!data.players || data.players.length === 0) {
   showToast('⚠️ Database rebuilt — please set up Owner PIN');
 }
 
-// On startup: load cloud data if newer, or push rebuild to cloud
+// On startup: push local to cloud (rebuild mode — local is source of truth)
 (async () => {
-  if (data._rebuilt) {
-    // Push rebuilt data to Firestore
+  // Always push local data to cloud — local has the rebuilt/correct data
+  if (data.players.length > 0 && firebaseReady) {
     await saveToCloud();
-    delete data._rebuilt;
-    saveLocal();
-    refreshUI();
-    return;
   }
-  const cloud = await loadFromCloud();
-  if (cloud && cloud.lastModified && (!data.lastModified || cloud.lastModified > data.lastModified)) {
-    data = cloud;
-    ensureAdmin(data);
-    saveLocal();
-    refreshUI();
-  } else if (data.players.length > 0 && firebaseReady) {
-    // Local has data but cloud doesn't or is older — push to cloud
-    saveToCloud();
+  // Listen for cloud changes but REJECT if data looks compromised
+  if (firebaseReady && db) {
+    try {
+      onSnapshot(doc(db, ...FIRESTORE_DOC.split('/')), (snap) => {
+        if (suppressRemoteUpdate) return;
+        const cloud = snap.exists() ? snap.data() : null;
+        if (!cloud) return;
+        // SECURITY: only accept cloud data if it has 15+ players AND Srikanth as owner
+        const cloudOk = (cloud.players || []).length >= 15 && cloud.admin && cloud.admin.ownerName === 'Srikanth' && cloud.admin.ownerPinHash;
+        if (cloudOk) {
+          data = cloud;
+          ensureAdmin(data);
+          saveLocal();
+          refreshUI();
+        }
+      });
+    } catch(e) { console.warn('Cloud listener failed:', e); }
   }
-  listenToCloud();
   refreshUI();
 })();
 
@@ -862,17 +840,15 @@ function getPlayerNames() { return data.players.map(p => p.name); }
 function addPlayer() {
   if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
   const nameInput = document.getElementById('apName');
-  const phoneInput = document.getElementById('apPhone');
-  const emailInput = document.getElementById('apEmail');
+    const emailInput = document.getElementById('apEmail');
   const name = nameInput.value.trim();
-  const phone = phoneInput.value.trim();
   const email = emailInput.value.trim();
   if (!name) return showToast('Enter a player name');
   if (data.players.length >= 25) return showToast('Maximum 25 players');
   if (data.players.find(p => p.name.toLowerCase() === name.toLowerCase())) return showToast('Player already exists');
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showToast('Invalid email format');
-  data.players.push({ name, icon:'🎰', phone: phone || null, email: email || null, addedAt: new Date().toISOString() });
-  nameInput.value = ''; phoneInput.value = ''; emailInput.value = '';
+  data.players.push({ name, icon:'🎰', email: email || null, addedAt: new Date().toISOString() });
+  nameInput.value = ''; emailInput.value = '';
   document.getElementById('addPlayerModal').classList.remove('active');
   saveData();
   renderPlayers();
@@ -883,7 +859,6 @@ function addPlayer() {
 window.showAddPlayerModal = function() {
   if (!canWrite()) return showToast('🔒 Login as Owner or Moderator to do this.');
   document.getElementById('apName').value = '';
-  document.getElementById('apPhone').value = '';
   document.getElementById('apEmail').value = '';
   document.getElementById('addPlayerModal').classList.add('active');
   setTimeout(() => document.getElementById('apName').focus(), 100);
@@ -1968,10 +1943,14 @@ function checkRateLimit() {
 
 function recordFailedAttempt() {
   loginAttempts++;
+  const remaining = 5 - loginAttempts;
   if (loginAttempts >= 5) {
-    lockoutUntil = Date.now() + 5 * 60 * 1000; // 5 min lockout
+    lockoutUntil = Date.now() + 5 * 60 * 1000;
     loginAttempts = 0;
-    showToast('🔒 Locked out for 5 minutes');
+    showToast('🔒 Locked out for 5 minutes — too many wrong attempts');
+    logAdminAction('Login lockout triggered — 5 failed PIN attempts');
+  } else {
+    showToast(`⚠️ Wrong PIN — ${remaining} attempt${remaining === 1 ? '' : 's'} remaining`);
   }
 }
 
@@ -2011,10 +1990,8 @@ function toggleAdmin() {
     document.getElementById('adminPinTitle').textContent = '👑 Owner Setup';
     document.getElementById('adminPinMsg').innerHTML = `<div style="text-align:left">
       <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Your Name <span style="color:var(--red)">*</span></label>
-      <input type="text" id="ownerSetupName" placeholder="e.g. Srikanth" maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter')document.getElementById('ownerSetupPhone').focus()">
-      <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Phone <span style="color:var(--text-muted)">(optional)</span></label>
-      <input type="tel" id="ownerSetupPhone" placeholder="+31 6 1234 5678" maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter')document.getElementById('ownerSetupEmail').focus()">
-      <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Email <span style="color:var(--text-muted)">(optional — used for PIN reset)</span></label>
+      <input type="text" id="ownerSetupName" placeholder="e.g. Srikanth" maxlength="20" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter')document.getElementById('ownerSetupEmail').focus()">
+<label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Email <span style="color:var(--text-muted)">(optional — used for PIN reset)</span></label>
       <input type="email" id="ownerSetupEmail" placeholder="you@email.com" maxlength="50" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter')document.querySelector('.pin-digit[data-idx=\\'0\\']').focus()">
       <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:6px">Set a 6-digit PIN</label>
     </div>`;
@@ -2118,8 +2095,7 @@ window.setupPlayerPin = function(name) {
     adminPinMode = 'player-setup';
     document.getElementById('adminPinTitle').textContent = `🔑 Setup for ${name}`;
     document.getElementById('adminPinMsg').innerHTML = `<div style="text-align:left">
-      <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Phone <span style="color:var(--text-muted)">(optional)</span></label>
-      <input type="tel" id="playerSetupPhone" placeholder="+31 6 1234 5678" maxlength="20" value="${player?.phone||''}" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter')document.getElementById('playerSetupEmail').focus()">
+
       <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:4px">Email <span style="color:var(--text-muted)">(optional)</span></label>
       <input type="email" id="playerSetupEmail" placeholder="you@email.com" maxlength="50" value="${player?.email||''}" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter')document.querySelector('.pin-digit[data-idx=\\'0\\']').focus()">
       <label style="font-size:0.82rem;color:var(--text-dim);display:block;margin-bottom:6px">Set a 6-digit PIN</label>
@@ -2135,8 +2111,7 @@ window.setupPlayerPin = function(name) {
 };
 
 window.adminResetPlayerPin = function(name) {
-  if (!isAdminAny()) return;
-  // Protect owner — only owner can reset their own PIN
+  if (!isOwner()) return showToast('🔒 Owner only');
   if (data.admin.ownerName && name.toLowerCase() === data.admin.ownerName.toLowerCase() && !isOwner()) {
     return showToast('🔒 Cannot reset the Owner\'s PIN.');
   }
@@ -2150,6 +2125,27 @@ window.adminResetPlayerPin = function(name) {
     renderPlayers();
     showToast(`🔑 PIN reset for ${name}`);
   }
+};
+
+window.wipeAllPlayerPins = function() {
+  if (!isOwner()) return showToast('🔒 Owner only');
+  if (!confirm('Reset ALL player PINs?\n\nEveryone (except you) will need to set new PINs.\n\nProceed?')) return;
+  data.players.forEach(p => {
+    if (p.name !== data.admin.ownerName) delete p.pinHash;
+  });
+  // Also clear all mod PINs
+  data.admin.mods = [];
+  saveData();
+  logAdminAction('Wiped all player and moderator PINs');
+  renderAdminPanel();
+  renderPlayers();
+  showToast('🔓 All PINs reset — everyone needs to set new ones');
+};
+
+window.clearLockout = function() {
+  loginAttempts = 0;
+  lockoutUntil = 0;
+  showToast('🔓 Lockout cleared — login attempts reset');
 };
 
 // PIN input behavior
@@ -2176,10 +2172,8 @@ window.submitPin = async function() {
 
   if (adminPinMode === 'owner-setup-name') {
     const nameInput = document.getElementById('ownerSetupName');
-    const phoneInput = document.getElementById('ownerSetupPhone');
     const emailInput = document.getElementById('ownerSetupEmail');
     const name = nameInput ? nameInput.value.trim() : '';
-    const phone = phoneInput ? phoneInput.value.trim() : '';
     const email = emailInput ? emailInput.value.trim() : '';
     if (!name) { err.textContent = 'Enter your name first.'; nameInput && nameInput.focus(); return; }
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Invalid email format.'; emailInput && emailInput.focus(); return; }
@@ -2188,7 +2182,6 @@ window.submitPin = async function() {
     data.admin.ownerName = name;
     let player = data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
     if (!player) { player = { name, icon:'🎰', addedAt: new Date().toISOString() }; data.players.push(player); }
-    if (phone) player.phone = phone;
     if (email) player.email = email;
     saveData();
     adminRole = 'owner'; adminName = name;
@@ -2263,15 +2256,12 @@ window.submitPin = async function() {
   } else if (adminPinMode === 'player-setup') {
     const player = data.players.find(p => p.name === pendingModName);
     if (player) {
-      const phoneInput = document.getElementById('playerSetupPhone');
       const emailInput = document.getElementById('playerSetupEmail');
-      const phone = phoneInput ? phoneInput.value.trim() : '';
-      const email = emailInput ? emailInput.value.trim() : '';
+        const email = emailInput ? emailInput.value.trim() : '';
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Invalid email format.'; emailInput && emailInput.focus(); return; }
       err.textContent = 'Setting up...';
       player.pinHash = await hashPinSecure(pin);
-      if (phone) player.phone = phone;
-      if (email) player.email = email;
+        if (email) player.email = email;
       saveData();
       cancelAdminPin(); renderPlayers();
       showToast(`🔑 PIN set for ${pendingModName}!`);
@@ -2498,6 +2488,10 @@ function renderAdminPanel() {
     });
     html += '</div>';
   }
+  html += '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">';
+  html += '<button class="btn btn-danger btn-sm" onclick="wipeAllPlayerPins()" style="font-size:0.78rem">🔓 Reset ALL Player PINs</button>';
+  html += '<button class="btn btn-outline btn-sm" onclick="clearLockout()" style="font-size:0.78rem">🔓 Clear Lockout</button>';
+  html += '</div>';
   html += '</div>';
   html += '<div><div class="section-title" style="margin-bottom:12px;border-top:1px solid var(--border);padding-top:20px"><span class="icon">📝</span> Admin Audit Log</div>';
   if (log.length === 0) {
@@ -2604,7 +2598,7 @@ function renderWelcomeBanner() {
   banner.style.display = '';
   banner.innerHTML = `<div class="welcome-banner">
     <div class="welcome-greeting">${roleIcon} Welcome, ${displayName}!</div>
-    ${player ? `<div style="font-size:0.82rem;color:var(--text-dim);margin-bottom:12px">${roleLabel} · ${player.phone ? '📱 '+player.phone+' · ' : ''}${player.email ? '✉️ '+player.email : ''}</div>` : ''}
+    ${player ? `<div style="font-size:0.82rem;color:var(--text-dim);margin-bottom:12px">${roleLabel} · ${player.email ? '✉️ '+player.email : ''}</div>` : ''}
     ${statsHtml || `<div style="color:var(--text-dim);font-size:0.85rem">No player data found for your name. Add yourself as a player to see stats here.</div>`}
   </div>`;
 }
