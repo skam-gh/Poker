@@ -644,11 +644,27 @@ function ensureAdmin(d) {
     d.settlementCutoff = '2026-05-22T23:59:59.000Z';
     d._settlementCutoffSet = true;
   }
-  // One-time: remove unauthorized mod
-  if (!d._modCleanup1) {
-    d.admin.mods = (d.admin.mods || []).filter(m => m.name !== 'Hari');
-    d._modCleanup1 = true;
+  // PERMANENT FIX: Force owner to Srikanth, remove Hari from everything (runs EVERY load)
+  d.admin.ownerName = 'Srikanth';
+  d.admin.mods = (d.admin.mods || []).filter(m => m.name !== 'Hari');
+  // Remove Hari's email/phone from Srikanth's player record
+  const ownerRec = (d.players || []).find(p => p.name === 'Srikanth');
+  if (ownerRec && ownerRec.email && ownerRec.email.includes('srihari')) delete ownerRec.email;
+  if (ownerRec && ownerRec.phone && ownerRec.phone.includes('32970')) delete ownerRec.phone;
+  // If first player is Hari, swap names
+  if (d.players && d.players[0] && d.players[0].name === 'Hari') {
+    // Find Srikanth elsewhere in the list
+    const sriIdx = d.players.findIndex(p => p.name === 'Srikanth');
+    if (sriIdx > 0) {
+      // Swap positions
+      const temp = d.players[0];
+      d.players[0] = d.players[sriIdx];
+      d.players[sriIdx] = temp;
+    }
   }
+  // Clear any pending reset codes
+  delete d.admin._resetCode;
+  delete d.admin._resetExpiry;
   // Clean up any old localStorage keys from previous versions
   localStorage.removeItem('poker_owner_pin');
   localStorage.removeItem('poker_moderators');
@@ -739,8 +755,55 @@ function listenToCloud() {
 
 let data = loadLocal();
 
-// On startup: load cloud data if newer
+// ═══ REBUILD: Inject recovered data if database is empty/wiped ═══
+if (!data.players || data.players.length === 0) {
+  data = {
+    version: '3.0',
+    createdAt: '2026-03-14T12:00:00.000Z',
+    players: [
+      { name:'Srikanth', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Karan', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Sanket', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Rohit', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Hari', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Dheeraj', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Shrikant', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Sumeet', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Rajeev', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Surya', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Mahesh', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Rammohan', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Ramashanker', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'SrinivasM', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+      { name:'Shashi', icon:'🎰', addedAt:'2026-03-14T12:00:00.000Z' },
+    ],
+    transactions: [],
+    settlements: [],
+    settings: { borrowLimit: 1 },
+    admin: {
+      ownerPinHash: null,
+      ownerName: 'Srikanth',
+      mods: [],
+      auditLog: [{ timestamp: new Date().toISOString(), actor:'System', role:'system', action:'Data rebuilt after security breach. Historical transactions need to be re-entered.' }]
+    },
+    settlementCutoff: new Date().toISOString(),
+    _rebuilt: true
+  };
+  ensureAdmin(data);
+  saveLocal();
+  showToast('⚠️ Database rebuilt — please set up Owner PIN');
+}
+
+// On startup: load cloud data if newer, or push rebuild to cloud
 (async () => {
+  if (data._rebuilt) {
+    // Push rebuilt data to Firestore
+    await saveToCloud();
+    delete data._rebuilt;
+    saveLocal();
+    refreshUI();
+    return;
+  }
   const cloud = await loadFromCloud();
   if (cloud && cloud.lastModified && (!data.lastModified || cloud.lastModified > data.lastModified)) {
     data = cloud;
