@@ -655,11 +655,9 @@ function ensureAdmin(d) {
   d.players = d.players.filter(p => p.name !== 'Hari');
   // Set owner email for PIN reset
   const ownerRec = d.players.find(p => p.name === 'Srikanth');
-  if (ownerRec) ownerRec.email = 'vsramja@gmail.com';
-  d.admin.mods = (d.admin.mods || []).filter(m => m.name !== 'Hari');
-  // Remove Hari's email/phone from Srikanth's player record
-  const ownerRec = (d.players || []).find(p => p.name === 'Srikanth');
-  if (ownerRec && ownerRec.email && ownerRec.email.includes('srihari')) delete ownerRec.email;
+  if (ownerRec) {
+    ownerRec.email = 'vsramja@gmail.com';
+  }
   // If first player is Hari, swap names
   if (d.players && d.players[0] && d.players[0].name === 'Hari') {
     // Find Srikanth elsewhere in the list
