@@ -571,6 +571,9 @@ try { emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY }); } catch(e) { console.warn
 // 4. Paste your Site Key below
 // 5. In Firebase Console → App Check → APIs → Enforce for Firestore
 // ══════════════════════════════════════════════════════════════
+// App Check — DISABLED until reCAPTCHA Enterprise domain is configured
+// To re-enable: change RECAPTCHA_ENABLED to true after setting up domain in Google Cloud Console
+const RECAPTCHA_ENABLED = false;
 const RECAPTCHA_SITE_KEY = '6Ldn55ctAAAAAKjbsILzUOl9Lm2gG-MHz1EU0D4';
 // ══════════════════════════════════════════════════════════════
 
@@ -583,7 +586,7 @@ let suppressRemoteUpdate = false;
 try {
   const app = initializeApp(firebaseConfig);
   // Initialize App Check (only if reCAPTCHA key is configured)
-  if (RECAPTCHA_SITE_KEY && RECAPTCHA_SITE_KEY !== 'YOUR_RECAPTCHA_SITE_KEY') {
+  if (RECAPTCHA_ENABLED && RECAPTCHA_SITE_KEY && RECAPTCHA_SITE_KEY !== 'YOUR_RECAPTCHA_SITE_KEY') {
     try {
       const { initializeAppCheck, ReCaptchaEnterpriseProvider } = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-app-check.js');
       initializeAppCheck(app, {
