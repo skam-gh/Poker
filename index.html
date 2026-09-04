@@ -669,13 +669,12 @@ function ensureAdmin(d) {
   localStorage.removeItem('poker_owner_pin');
   localStorage.removeItem('poker_moderators');
   localStorage.removeItem('poker_audit_log');
-  // One-time wipe: if PINs were set with old hash (prefix 'h_' or 'v2_'), clear them — now using v3 (6-digit)
-  if (d.admin.ownerPinHash && !d.admin.ownerPinHash.startsWith('v3_')) {
+  // One-time wipe: if PINs were set with old hash (prefix 'h_' or 'v2_'), clear them — now using v3/v4
+  if (d.admin.ownerPinHash && !d.admin.ownerPinHash.startsWith('v3_') && !d.admin.ownerPinHash.startsWith('v4_')) {
     d.admin.ownerPinHash = null;
     d.admin.mods.forEach(m => { delete m.pinHash; });
     d.admin.mods = [];
     d.players && d.players.forEach(p => { delete p.pinHash; });
-    d.admin.auditLog.push({ timestamp: new Date().toISOString(), actor: 'System', role: 'system', action: 'All PINs wiped — upgraded to 6-digit PIN. Please set up PINs again.' });
   }
   return d;
 }
