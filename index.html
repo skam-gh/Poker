@@ -873,7 +873,7 @@ function renderPlayers() {
   const wrap = document.getElementById('playerTableWrap');
   if (data.players.length === 0) {
     wrap.innerHTML = '<div class="empty"><div class="icon">🃏</div><p>No players yet. Add players to get started!</p></div>';
-    populatePlayerPinSelect();
+
     return;
   }
 
@@ -916,7 +916,7 @@ function renderPlayers() {
 
   html += '</tbody></table>';
   wrap.innerHTML = html;
-  populatePlayerPinSelect();
+
 }
 
 // ─── Poker Sessions (date-based view) ───
