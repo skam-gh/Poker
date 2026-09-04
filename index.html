@@ -620,62 +620,27 @@ function defaultData() {
 }
 
 function ensureAdmin(d) {
-  if (!d.admin) d.admin = { ownerPinHash: null, mods: [], auditLog: [] };
+  if (!d.admin) d.admin = {};
   if (!d.admin.mods) d.admin.mods = [];
   if (!d.admin.auditLog) d.admin.auditLog = [];
-  // Security: limit mods to 3 max, remove any without proper pinHash
-  if (d.admin.mods.length > 3) {
-    d.admin.mods = d.admin.mods.slice(0, 3);
-  }
-  d.admin.mods = d.admin.mods.filter(m => m && m.name && m.pinHash && typeof m.pinHash === 'string' && (m.pinHash.startsWith('v3_') || m.pinHash.startsWith('v4_')));
+  if (!d.players) d.players = [];
+  if (!d.transactions) d.transactions = [];
+  if (!d.settlements) d.settlements = [];
   if (!d.settings) d.settings = {};
   if (d.settings.borrowLimit === undefined) d.settings.borrowLimit = 1;
-  if (!d.settlements) d.settlements = [];
-  // One-time: set settlement cutoff to mark all old sessions as settled (before May 23, 2026)
-  if (!d._settlementCutoffSet) {
-    d.settlementCutoff = '2026-05-22T23:59:59.000Z';
-    d._settlementCutoffSet = true;
-  }
-  // REBUILD: Start fresh — empty player list, owner adds players as needed
-  const requiredPlayers = [];
-  if (!d.players) d.players = [];
-  // PERMANENT FIX: Force owner to Srikanth, set owner email, remove Hari completely
+  // Force owner name
   d.admin.ownerName = 'Srikanth';
-  d.admin.mods = (d.admin.mods || []).filter(m => m.name !== 'Hari');
-  // Remove Hari from players list entirely
+  // Remove Hari
+  d.admin.mods = d.admin.mods.filter(m => m && m.name && m.name !== 'Hari');
   d.players = d.players.filter(p => p.name !== 'Hari');
-  // Set owner email for PIN reset
+  // Set owner email
   const ownerRec = d.players.find(p => p.name === 'Srikanth');
-  if (ownerRec) {
-    ownerRec.email = 'vsramja@gmail.com';
-  }
-  // If first player is Hari, swap names
-  if (d.players && d.players[0] && d.players[0].name === 'Hari') {
-    // Find Srikanth elsewhere in the list
-    const sriIdx = d.players.findIndex(p => p.name === 'Srikanth');
-    if (sriIdx > 0) {
-      // Swap positions
-      const temp = d.players[0];
-      d.players[0] = d.players[sriIdx];
-      d.players[sriIdx] = temp;
-    }
-  }
-  // Remove phone numbers from all player records
-  (d.players || []).forEach(p => { delete p.phone; });
-  // Clear any pending reset codes
-  delete d.admin._resetCode;
-  delete d.admin._resetExpiry;
-  // Clean up any old localStorage keys from previous versions
-  localStorage.removeItem('poker_owner_pin');
-  localStorage.removeItem('poker_moderators');
-  localStorage.removeItem('poker_audit_log');
-  // One-time wipe: if PINs were set with old hash (prefix 'h_' or 'v2_'), clear them — now using v3/v4
-  if (d.admin.ownerPinHash && !d.admin.ownerPinHash.startsWith('v3_') && !d.admin.ownerPinHash.startsWith('v4_')) {
-    d.admin.ownerPinHash = null;
-    d.admin.mods.forEach(m => { delete m.pinHash; });
-    d.admin.mods = [];
-    d.players && d.players.forEach(p => { delete p.pinHash; });
-  }
+  if (ownerRec) ownerRec.email = 'vsramja@gmail.com';
+  // Strip phone numbers
+  d.players.forEach(p => { delete p.phone; });
+  // Settlement cutoff
+  if (!d.settlementCutoff) d.settlementCutoff = '2026-05-22T23:59:59.000Z';
+  // NEVER touch ownerPinHash here — preserve whatever was saved
   return d;
 }
 
