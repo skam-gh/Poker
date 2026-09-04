@@ -1819,18 +1819,21 @@ function requirePinConfirm(title, callback) {
 const PBKDF2_ITERATIONS = 150000;
 
 async function hashPinSecure(pin, randomSalt) {
-  // Generate random salt if not provided (new PIN setup)
-  const salt = randomSalt || crypto.getRandomValues(new Uint8Array(16));
-  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2,'0')).join('');
-  // Encode PIN with app-specific pepper
-  const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(pin), 'PBKDF2', false, ['deriveBits']);
-  const derived = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt: encoder.encode('APC_' + saltHex), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
-    keyMaterial, 256
-  );
-  const hashHex = Array.from(new Uint8Array(derived)).map(b => b.toString(16).padStart(2,'0')).join('');
-  return 'v4_' + saltHex + '$' + hashHex;
+  try {
+    const salt = randomSalt || crypto.getRandomValues(new Uint8Array(16));
+    const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2,'0')).join('');
+    const encoder = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(pin), 'PBKDF2', false, ['deriveBits']);
+    const derived = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: encoder.encode('APC_' + saltHex), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+      keyMaterial, 256
+    );
+    const hashHex = Array.from(new Uint8Array(derived)).map(b => b.toString(16).padStart(2,'0')).join('');
+    return 'v4_' + saltHex + '$' + hashHex;
+  } catch(e) {
+    console.warn('PBKDF2 failed, using legacy hash:', e);
+    return hashPinLegacy(pin, 'secure_' + Date.now());
+  }
 }
 
 async function verifyPinSecure(pin, storedHash) {
@@ -2138,10 +2141,12 @@ window.submitPin = async function() {
     err.textContent = 'Setting up...';
     data.admin.ownerPinHash = await hashPinSecure(pin);
     data.admin.ownerName = name;
+    console.log('Owner PIN hash set:', data.admin.ownerPinHash ? '✅ ' + data.admin.ownerPinHash.substring(0,10) + '...' : '❌ FAILED');
     let player = data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
     if (!player) { player = { name, icon:'🎰', addedAt: new Date().toISOString() }; data.players.push(player); }
     if (email) player.email = email;
     saveData();
+    console.log('Data saved. localStorage check:', localStorage.getItem('poker_tracker_v3') ? '✅ exists' : '❌ missing');
     adminRole = 'owner'; adminName = name;
     sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name }));
     logAdminAction(`Owner "${name}" set up`);
