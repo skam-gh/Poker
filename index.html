@@ -327,15 +327,6 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
       <div class="section-title"><span class="icon">👥</span> Players — All Time</div>
       <div style="overflow-x:auto" id="playerTableWrap"></div>
     </div>
-    <!-- Player PIN setup -->
-    <div class="section" id="playerPinSection">
-      <div class="section-title"><span class="icon">🔑</span> Set / Change My PIN</div>
-      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">Select your name and set a 6-digit PIN to check your scores from any device.</p>
-      <div class="input-row">
-        <select id="playerPinSelect"><option value="">Select your name...</option></select>
-        <button class="btn btn-primary" onclick="setupPlayerPin(document.getElementById('playerPinSelect').value)">🔑 Set PIN</button>
-      </div>
-    </div>
     <div id="addPlayerRow" style="margin-top:8px">
       <button class="btn btn-primary" onclick="showAddPlayerModal()" style="width:100%;padding:14px;font-size:0.95rem">+ Add New Player</button>
     </div>
@@ -745,46 +736,27 @@ function listenToCloud() { /* disabled — inline listener with security checks 
 
 let data = loadLocal();
 
-// ═══ REBUILD: Inject recovered data if database is empty/wiped ═══
-if (!data.players || data.players.length === 0) {
-  data = {
-    version: '3.0',
-    createdAt: '2026-03-14T12:00:00.000Z',
-    players: [
-      { name:'Srikanth', icon:'🎰', email:'vsramja@gmail.com', addedAt: new Date().toISOString() },
-    ],
-    transactions: [],
-    settlements: [],
-    settings: { borrowLimit: 1 },
-    admin: {
-      ownerPinHash: null,
-      ownerName: 'Srikanth',
-      mods: [],
-      auditLog: [{ timestamp: new Date().toISOString(), actor:'System', role:'system', action:'Data rebuilt after security breach. Historical transactions need to be re-entered.' }]
-    },
-    settlementCutoff: new Date().toISOString(),
-    _rebuilt: true
-  };
-  ensureAdmin(data);
-  saveLocal();
-  showToast('⚠️ Database rebuilt — please set up Owner PIN');
-}
+// Ensure minimum data structure exists
+if (!data.players) data.players = [];
+if (!data.transactions) data.transactions = [];
+if (!data.settlements) data.settlements = [];
+if (!data.admin) data.admin = { ownerPinHash: null, ownerName: 'Srikanth', mods: [], auditLog: [] };
+if (!data.settings) data.settings = { borrowLimit: 1 };
+ensureAdmin(data);
+saveLocal();
 
-// On startup: push local to cloud (rebuild mode — local is source of truth)
+// On startup: sync with cloud
 (async () => {
-  // Always push local data to cloud — local has the rebuilt/correct data
-  if (data.players.length > 0 && firebaseReady) {
+  if (data.admin.ownerPinHash && firebaseReady) {
     await saveToCloud();
   }
-  // Listen for cloud changes but REJECT if data looks compromised
   if (firebaseReady && db) {
     try {
       onSnapshot(doc(db, ...FIRESTORE_DOC.split('/')), (snap) => {
         if (suppressRemoteUpdate) return;
         const cloud = snap.exists() ? snap.data() : null;
         if (!cloud) return;
-        // SECURITY: only accept cloud data if it has 15+ players AND Srikanth as owner
-        const cloudOk = (cloud.players || []).length >= 15 && cloud.admin && cloud.admin.ownerName === 'Srikanth' && cloud.admin.ownerPinHash;
+        const cloudOk = cloud.admin && cloud.admin.ownerName === 'Srikanth' && cloud.admin.ownerPinHash;
         if (cloudOk) {
           data = cloud;
           ensureAdmin(data);
@@ -945,24 +917,6 @@ function renderPlayers() {
   html += '</tbody></table>';
   wrap.innerHTML = html;
   populatePlayerPinSelect();
-}
-
-function populatePlayerPinSelect() {
-  const sel = document.getElementById('playerPinSelect');
-  if (!sel) return;
-  // If logged in as player, pre-select their name
-  if (isPlayerOnly() && adminName) {
-    const player = data.players.find(p => p.name === adminName);
-    const hasPin = player && player.pinHash;
-    sel.innerHTML = `<option value="${adminName}" selected>${adminName}${hasPin ? ' (🔑 change PIN)' : ''}</option>`;
-    return;
-  }
-  const val = sel.value;
-  sel.innerHTML = '<option value="">Select your name...</option>' + data.players.map(p => {
-    const hasPin = p.pinHash ? ' (🔑 PIN set — change)' : '';
-    return `<option value="${p.name}">${p.name}${hasPin}</option>`;
-  }).join('');
-  sel.value = val;
 }
 
 // ─── Poker Sessions (date-based view) ───
@@ -2006,35 +1960,24 @@ function toggleAdmin() {
     return;
   } else {
     adminPinMode = 'choose-role';
-    document.getElementById('adminPinTitle').textContent = '🔐 Login As';
-    const mods = getMods();
-    const ownerLower = (data.admin.ownerName || '').toLowerCase();
-    const modNames = mods.map(m => m.name.toLowerCase());
-    // All players except owner and moderators (they have their own buttons above)
-    const allPlayers = data.players.filter(p => 
-      p.name.toLowerCase() !== ownerLower && !modNames.includes(p.name.toLowerCase())
-    );
-    let msg = '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;max-height:320px;overflow-y:auto">';
-    msg += `<div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:4px 0">Admin</div>`;
-    msg += `<button class="btn btn-primary" onclick="startOwnerLogin()" style="width:100%">👑 ${data.admin.ownerName || 'Owner'}</button>`;
-    mods.forEach(m => { msg += `<button class="btn btn-outline" onclick="startModLogin('${m.name.replace(/'/g,"\\'")}')" style="width:100%">🛡️ ${m.name}</button>`; });
-    if (allPlayers.length > 0) {
-      msg += `<div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:8px 0 4px;border-top:1px solid var(--border);margin-top:4px">Players</div>`;
-      allPlayers.forEach(p => {
-        const hasPin = !!p.pinHash;
-        const label = hasPin ? `🎰 ${p.name}` : `🎰 ${p.name} <span style="font-size:0.7rem;color:var(--text-muted)">(set PIN)</span>`;
-        const action = hasPin 
-          ? `startPlayerLogin('${p.name.replace(/'/g,"\\'")}')`
-          : `cancelAdminPin(); setupPlayerPin('${p.name.replace(/'/g,"\\'")}')`;
-        msg += `<button class="btn btn-outline" onclick="${action}" style="width:100%;text-align:left">${label}</button>`;
-      });
-    }
+    document.getElementById('adminPinTitle').textContent = '🔐 Login';
+    let msg = '<div style="display:flex;flex-direction:column;gap:10px">';
+    msg += '<input type="text" id="loginNameInput" placeholder="Type your name..." style="padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:1rem;font-family:inherit;text-align:center" autocomplete="off">';
+    msg += '<button class="btn btn-primary" onclick="loginByName()" style="width:100%;padding:12px">Continue</button>';
     msg += '</div>';
     document.getElementById('adminPinMsg').innerHTML = msg;
     document.getElementById('pinResetOption').style.display = 'none';
     document.querySelector('.pin-row').style.display = 'none';
     document.querySelector('.modal-actions').style.display = 'none';
+    document.getElementById('pinError').textContent = '';
     document.getElementById('adminPinModal').classList.add('active');
+    setTimeout(() => {
+      const inp = document.getElementById('loginNameInput');
+      if (inp) {
+        inp.focus();
+        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') loginByName(); });
+      }
+    }, 100);
     return;
   }
   clearPinInputs();
@@ -2044,6 +1987,36 @@ function toggleAdmin() {
   document.getElementById('adminPinModal').classList.add('active');
   setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
 }
+
+// Login by typed name
+window.loginByName = function() {
+  const inp = document.getElementById('loginNameInput');
+  const name = inp ? inp.value.trim() : '';
+  if (!name) return;
+  const err = document.getElementById('pinError');
+  const ownerName = data.admin.ownerName || '';
+  const mods = getMods();
+  if (name.toLowerCase() === ownerName.toLowerCase()) { startOwnerLogin(); return; }
+  const mod = mods.find(m => m.name.toLowerCase() === name.toLowerCase());
+  if (mod) { startModLogin(mod.name); return; }
+  const player = data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
+  if (player) {
+    if (player.pinHash) { startPlayerLogin(player.name); }
+    else {
+      pendingModName = player.name;
+      adminPinMode = 'player-setup';
+      document.getElementById('adminPinTitle').textContent = '🔑 Set Your PIN';
+      document.getElementById('adminPinMsg').textContent = 'Welcome ' + player.name + '! Create a 6-digit PIN to access your scores.';
+      document.getElementById('pinResetOption').style.display = 'none';
+      document.querySelector('.pin-row').style.display = 'flex';
+      document.querySelector('.modal-actions').style.display = 'flex';
+      clearPinInputs(); err.textContent = '';
+      setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+    }
+    return;
+  }
+  err.textContent = '"' + name + '" not found. Ask the admin to add you.';
+};
 
 window.startOwnerLogin = function() {
   adminPinMode = 'owner-login';
@@ -2477,17 +2450,31 @@ function renderAdminPanel() {
   html += '<div style="margin-bottom:24px;border-top:1px solid var(--border);padding-top:20px">';
   html += '<div class="section-title" style="margin-bottom:12px"><span class="icon">🔑</span> Player PINs</div>';
   const playersWithPins = data.players.filter(p => p.pinHash);
-  if (playersWithPins.length === 0) {
-    html += '<p style="color:var(--text-dim);font-size:0.9rem">No players have set up PINs yet.</p>';
+  const playersWithoutPins = data.players.filter(p => !p.pinHash && p.name !== data.admin.ownerName);
+  if (playersWithPins.length === 0 && playersWithoutPins.length === 0) {
+    html += '<p style="color:var(--text-dim);font-size:0.9rem">No players added yet.</p>';
   } else {
-    html += '<div style="display:flex;flex-direction:column;gap:8px">';
-    playersWithPins.forEach(p => {
-      html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
-        <div><strong>${p.name}</strong> <span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:rgba(52,211,153,0.12);color:#34d399">🔑 PIN set</span></div>
-        <button class="btn btn-danger btn-sm" onclick="adminResetPlayerPin('${p.name.replace(/'/g,"\\'")}')">Reset PIN</button>
-      </div>`;
-    });
-    html += '</div>';
+    if (playersWithoutPins.length > 0) {
+      html += '<div style="margin-bottom:12px;padding:10px 14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:var(--radius-sm);font-size:0.85rem;color:var(--accent)">⚠ Players without PINs cannot login. Set PINs below.</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">';
+      playersWithoutPins.forEach(p => {
+        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
+          <div><strong>${p.name}</strong> <span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:rgba(248,113,113,0.12);color:#f87171">No PIN</span></div>
+          <button class="btn btn-primary btn-sm" onclick="setupPlayerPin('${p.name.replace(/'/g,"\\'")}')">🔑 Set PIN</button>
+        </div>`;
+      });
+      html += '</div>';
+    }
+    if (playersWithPins.length > 0) {
+      html += '<div style="display:flex;flex-direction:column;gap:8px">';
+      playersWithPins.forEach(p => {
+        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
+          <div><strong>${p.name}</strong> <span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:rgba(52,211,153,0.12);color:#34d399">🔑 PIN set</span></div>
+          <button class="btn btn-danger btn-sm" onclick="adminResetPlayerPin('${p.name.replace(/'/g,"\\'")}')">Reset PIN</button>
+        </div>`;
+      });
+      html += '</div>';
+    }
   }
   html += '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">';
   html += '<button class="btn btn-danger btn-sm" onclick="wipeAllPlayerPins()" style="font-size:0.78rem">🔓 Reset ALL Player PINs</button>';
@@ -2736,9 +2723,6 @@ function applyAccessControl() {
   // Hide import button (export is fine — read-only)
   const importBtn = document.querySelector('[onclick*="importFile"]');
   if (importBtn) importBtn.style.display = writeOk ? '' : 'none';
-  // Player PIN section: show for players and non-admin logged-in users
-  const pinSection = document.getElementById('playerPinSection');
-  if (pinSection) pinSection.style.display = loggedIn && !isAdminAny() ? '' : 'none';
   // If on a restricted tab without access, redirect to players
   if (!writeOk && document.getElementById('tab-actions')?.style.display !== 'none') {
     switchTab('players');
