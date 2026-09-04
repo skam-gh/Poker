@@ -745,26 +745,10 @@ if (!data.settings) data.settings = { borrowLimit: 1 };
 ensureAdmin(data);
 saveLocal();
 
-// On startup: sync with cloud
+// On startup: push to cloud if we have data, NO cloud listener (local is truth)
 (async () => {
   if (data.admin.ownerPinHash && firebaseReady) {
     await saveToCloud();
-  }
-  if (firebaseReady && db) {
-    try {
-      onSnapshot(doc(db, ...FIRESTORE_DOC.split('/')), (snap) => {
-        if (suppressRemoteUpdate) return;
-        const cloud = snap.exists() ? snap.data() : null;
-        if (!cloud) return;
-        const cloudOk = cloud.admin && cloud.admin.ownerName === 'Srikanth' && cloud.admin.ownerPinHash;
-        if (cloudOk) {
-          data = cloud;
-          ensureAdmin(data);
-          saveLocal();
-          refreshUI();
-        }
-      });
-    } catch(e) { console.warn('Cloud listener failed:', e); }
   }
   refreshUI();
 })();
