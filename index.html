@@ -628,19 +628,26 @@ function ensureAdmin(d) {
   if (!d.settlements) d.settlements = [];
   if (!d.settings) d.settings = {};
   if (d.settings.borrowLimit === undefined) d.settings.borrowLimit = 1;
-  // Force owner name
+  // Force owner — ALWAYS
   d.admin.ownerName = 'Srikanth';
+  // Recover owner PIN from backup if missing
+  if (!d.admin.ownerPinHash) {
+    const backup = localStorage.getItem('apc_owner_pin_backup');
+    if (backup) d.admin.ownerPinHash = backup;
+  }
+  // Ensure Srikanth exists as player
+  if (!d.players.find(p => p.name === 'Srikanth')) {
+    d.players.unshift({ name: 'Srikanth', icon: '🎰', email: 'vsramja@gmail.com', addedAt: new Date().toISOString() });
+  }
+  const ownerRec = d.players.find(p => p.name === 'Srikanth');
+  if (ownerRec) ownerRec.email = 'vsramja@gmail.com';
   // Remove Hari
   d.admin.mods = d.admin.mods.filter(m => m && m.name && m.name !== 'Hari');
   d.players = d.players.filter(p => p.name !== 'Hari');
-  // Set owner email
-  const ownerRec = d.players.find(p => p.name === 'Srikanth');
-  if (ownerRec) ownerRec.email = 'vsramja@gmail.com';
   // Strip phone numbers
   d.players.forEach(p => { delete p.phone; });
   // Settlement cutoff
   if (!d.settlementCutoff) d.settlementCutoff = '2026-05-22T23:59:59.000Z';
-  // NEVER touch ownerPinHash here — preserve whatever was saved
   return d;
 }
 
@@ -1864,7 +1871,15 @@ function resetAttempts() { loginAttempts = 0; }
 
 function getOwnerPin() { return data.admin.ownerPinHash; }
 function hasOwner() { return !!getOwnerPin(); }
-async function verifyOwnerPin(pin) { return await verifyPinSecure(pin, getOwnerPin()); }
+async function verifyOwnerPin(pin) {
+  const stored = getOwnerPin();
+  if (!stored) return false;
+  // Try legacy v3_ hash first (fast, reliable)
+  if (stored.startsWith('v3_')) return hashPinLegacy(pin, 'owner') === stored;
+  // Try PBKDF2 v4_ hash
+  if (stored.startsWith('v4_')) return await verifyPinSecure(pin, stored);
+  return false;
+}
 function getMods() { return data.admin.mods || []; }
 function saveMods(m) { data.admin.mods = m; saveData(); }
 function getAuditLog() { return data.admin.auditLog || []; }
@@ -2105,6 +2120,8 @@ window.submitPin = async function() {
     err.textContent = 'Setting up...';
     data.admin.ownerPinHash = await hashPinSecure(pin);
     data.admin.ownerName = name;
+    // Backup PIN hash separately so it survives data resets
+    localStorage.setItem('apc_owner_pin_backup', data.admin.ownerPinHash);
     console.log('Owner PIN hash set:', data.admin.ownerPinHash ? '✅ ' + data.admin.ownerPinHash.substring(0,10) + '...' : '❌ FAILED');
     let player = data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
     if (!player) { player = { name, icon:'🎰', addedAt: new Date().toISOString() }; data.players.push(player); }
@@ -2172,7 +2189,9 @@ window.submitPin = async function() {
 
   } else if (adminPinMode === 'reset-owner') {
     err.textContent = 'Setting up...';
-    data.admin.ownerPinHash = await hashPinSecure(pin); saveData();
+    data.admin.ownerPinHash = await hashPinSecure(pin);
+    localStorage.setItem('apc_owner_pin_backup', data.admin.ownerPinHash);
+    saveData();
     const ownerDisplayName = data.admin.ownerName || 'Owner';
     adminRole = 'owner'; adminName = ownerDisplayName;
     sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'owner', name:ownerDisplayName }));
