@@ -716,8 +716,19 @@ if (!data.settings) data.settings = { borrowLimit: 1 };
 ensureAdmin(data);
 saveLocal();
 
-// On startup: push to cloud if we have data, NO cloud listener (local is truth)
+// On startup: if local is empty, load from cloud. Then push-only.
 (async () => {
+  // If no owner PIN locally, try recovering from cloud
+  if (!data.admin.ownerPinHash && firebaseReady) {
+    const cloud = await loadFromCloud();
+    if (cloud && cloud.admin && cloud.admin.ownerPinHash) {
+      console.log('Recovered data from cloud');
+      data = cloud;
+      ensureAdmin(data);
+      saveLocal();
+    }
+  }
+  // Push local to cloud as backup
   if (data.admin.ownerPinHash && firebaseReady) {
     await saveToCloud();
   }
