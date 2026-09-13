@@ -523,8 +523,20 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 
 <!-- Firebase SDK via ESM CDN -->
 <script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
-import { getFirestore, doc, getDoc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
+// ─── Firebase (optional — app works offline without it) ───
+let initializeApp, getFirestore, doc, getDoc, setDoc, onSnapshot;
+try {
+  const appMod = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js');
+  const fsMod = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js');
+  initializeApp = appMod.initializeApp;
+  getFirestore = fsMod.getFirestore;
+  doc = fsMod.doc;
+  getDoc = fsMod.getDoc;
+  setDoc = fsMod.setDoc;
+  onSnapshot = fsMod.onSnapshot;
+} catch(e) {
+  console.warn('Firebase libraries failed to load — running offline:', e);
+}
 
 // ══════════════════════════════════════════════════════════════
 // 🔧 FIREBASE CONFIG — REPLACE WITH YOUR OWN VALUES
