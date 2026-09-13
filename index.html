@@ -546,9 +546,9 @@ import { getFirestore, doc, getDoc, setDoc, onSnapshot } from 'https://www.gstat
 // 2. Create a template with variables: {{to_email}}, {{owner_name}}, {{reset_code}}
 // 3. Copy your Public Key, Service ID, and Template ID below
 // ══════════════════════════════════════════════════════════════
-const EMAILJS_PUBLIC_KEY = 'YOUR_EMAILJS_PUBLIC_KEY';
-const EMAILJS_SERVICE_ID = 'YOUR_EMAILJS_SERVICE_ID';
-const EMAILJS_TEMPLATE_ID = 'YOUR_EMAILJS_TEMPLATE_ID';
+const EMAILJS_PUBLIC_KEY = '7ULogKQ_VMKtz0WNK';
+const EMAILJS_SERVICE_ID = 'service_szeiefp';
+const EMAILJS_TEMPLATE_ID = 'template_q38prqg';
 // ══════════════════════════════════════════════════════════════
 
 // Initialize EmailJS
@@ -620,33 +620,23 @@ function defaultData() {
 }
 
 function ensureAdmin(d) {
+  // Security-only checks — NEVER modify ownerPinHash
   if (!d.admin) d.admin = {};
   if (!d.admin.mods) d.admin.mods = [];
   if (!d.admin.auditLog) d.admin.auditLog = [];
   if (!d.players) d.players = [];
-  if (!d.transactions) d.transactions = [];
   if (!d.settlements) d.settlements = [];
-  if (!d.settings) d.settings = {};
-  if (d.settings.borrowLimit === undefined) d.settings.borrowLimit = 1;
-  // Force owner — ALWAYS
+  if (!d.settings) d.settings = { borrowLimit: 1 };
   d.admin.ownerName = 'Srikanth';
-  // Recover owner PIN from backup if missing
-  if (!d.admin.ownerPinHash) {
-    const backup = localStorage.getItem('apc_owner_pin_backup');
-    if (backup) d.admin.ownerPinHash = backup;
-  }
-  // Ensure Srikanth exists as player
+  // Remove Hari from moderators only — can stay as player (read-only)
+  d.admin.mods = d.admin.mods.filter(m => m && m.name && m.name !== 'Hari');
+  // Ensure Srikanth exists
   if (!d.players.find(p => p.name === 'Srikanth')) {
     d.players.unshift({ name: 'Srikanth', icon: '🎰', email: 'vsramja@gmail.com', addedAt: new Date().toISOString() });
   }
-  const ownerRec = d.players.find(p => p.name === 'Srikanth');
-  if (ownerRec) ownerRec.email = 'vsramja@gmail.com';
-  // Remove Hari
-  d.admin.mods = d.admin.mods.filter(m => m && m.name && m.name !== 'Hari');
-  d.players = d.players.filter(p => p.name !== 'Hari');
-  // Strip phone numbers
+  const sr = d.players.find(p => p.name === 'Srikanth');
+  if (sr) sr.email = 'vsramja@gmail.com';
   d.players.forEach(p => { delete p.phone; });
-  // Settlement cutoff
   if (!d.settlementCutoff) d.settlementCutoff = '2026-05-22T23:59:59.000Z';
   return d;
 }
@@ -658,11 +648,26 @@ function loadLocal() {
       const p = JSON.parse(raw);
       if (!p.players) p.players = [];
       if (!p.transactions) p.transactions = [];
-      ensureAdmin(p);
+      if (!p.admin) p.admin = {};
+      if (!p.admin.mods) p.admin.mods = [];
+      if (!p.admin.auditLog) p.admin.auditLog = [];
+      if (!p.settlements) p.settlements = [];
+      if (!p.settings) p.settings = { borrowLimit: 1 };
+      // Recover PIN from backup if missing
+      if (!p.admin.ownerPinHash) {
+        const backup = localStorage.getItem('apc_owner_pin_backup');
+        if (backup) p.admin.ownerPinHash = backup;
+      }
+      if (!p.admin.ownerName) p.admin.ownerName = 'Srikanth';
       return p;
     }
-  } catch(e) {}
-  return defaultData();
+  } catch(e) { console.warn('loadLocal error:', e); }
+  // No local data — check backup PIN
+  const d = defaultData();
+  const backup = localStorage.getItem('apc_owner_pin_backup');
+  if (backup) d.admin.ownerPinHash = backup;
+  d.admin.ownerName = 'Srikanth';
+  return d;
 }
 
 function saveLocal() {
@@ -706,31 +711,22 @@ async function loadFromCloud() {
 function listenToCloud() { /* disabled — inline listener with security checks */ }
 
 let data = loadLocal();
-
-// Ensure minimum data structure exists
-if (!data.players) data.players = [];
-if (!data.transactions) data.transactions = [];
-if (!data.settlements) data.settlements = [];
-if (!data.admin) data.admin = { ownerPinHash: null, ownerName: 'Srikanth', mods: [], auditLog: [] };
-if (!data.settings) data.settings = { borrowLimit: 1 };
 ensureAdmin(data);
-saveLocal();
 
-// On startup: if local is empty, load from cloud. Then push-only.
+// On startup: recover from cloud if local has no PIN, then push
 (async () => {
-  // If no owner PIN locally, try recovering from cloud
   if (!data.admin.ownerPinHash && firebaseReady) {
-    const cloud = await loadFromCloud();
-    if (cloud && cloud.admin && cloud.admin.ownerPinHash) {
-      console.log('Recovered data from cloud');
-      data = cloud;
-      ensureAdmin(data);
-      saveLocal();
-    }
+    try {
+      const cloud = await loadFromCloud();
+      if (cloud && cloud.admin && cloud.admin.ownerPinHash && cloud.admin.ownerName === 'Srikanth') {
+        data = cloud;
+        ensureAdmin(data);
+        saveLocal();
+      }
+    } catch(e) { console.warn('Cloud recovery failed:', e); }
   }
-  // Push local to cloud as backup
   if (data.admin.ownerPinHash && firebaseReady) {
-    await saveToCloud();
+    try { await saveToCloud(); } catch(e) {}
   }
   refreshUI();
 })();
@@ -1937,10 +1933,27 @@ function toggleAdmin() {
     return;
   } else {
     adminPinMode = 'choose-role';
-    document.getElementById('adminPinTitle').textContent = '🔐 Login';
-    let msg = '<div style="display:flex;flex-direction:column;gap:10px">';
-    msg += '<input type="text" id="loginNameInput" placeholder="Type your name..." style="padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:1rem;font-family:inherit;text-align:center" autocomplete="off">';
-    msg += '<button class="btn btn-primary" onclick="loginByName()" style="width:100%;padding:12px">Continue</button>';
+    document.getElementById('adminPinTitle').textContent = '🔐 Login As';
+    const mods = getMods();
+    const ownerLower = (data.admin.ownerName || '').toLowerCase();
+    const modNames = mods.map(m => m.name.toLowerCase());
+    const allPlayers = data.players.filter(p => 
+      p.name.toLowerCase() !== ownerLower && !modNames.includes(p.name.toLowerCase())
+    );
+    let msg = '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;max-height:320px;overflow-y:auto">';
+    msg += `<div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:4px 0">Admin</div>`;
+    msg += `<button class="btn btn-primary" onclick="startOwnerLogin()" style="width:100%">👑 ${data.admin.ownerName || 'Owner'}</button>`;
+    mods.forEach(m => { msg += `<button class="btn btn-outline" onclick="startModLogin('${m.name.replace(/'/g,"\\'")}')" style="width:100%">🛡️ ${m.name}</button>`; });
+    if (allPlayers.length > 0) {
+      msg += `<div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:8px 0 4px;border-top:1px solid var(--border);margin-top:4px">Players</div>`;
+      allPlayers.forEach(p => {
+        if (p.pinHash) {
+          msg += `<button class="btn btn-outline" onclick="startPlayerLogin('${p.name.replace(/'/g,"\\'")}')" style="width:100%;text-align:left">🎰 ${p.name}</button>`;
+        } else {
+          msg += `<button class="btn btn-outline" onclick="startPlayerSetup('${p.name.replace(/'/g,"\\'")}')" style="width:100%;text-align:left">🎰 ${p.name} <span style="font-size:0.7rem;color:var(--text-muted)">(set PIN)</span></button>`;
+        }
+      });
+    }
     msg += '</div>';
     document.getElementById('adminPinMsg').innerHTML = msg;
     document.getElementById('pinResetOption').style.display = 'none';
@@ -1948,13 +1961,6 @@ function toggleAdmin() {
     document.querySelector('.modal-actions').style.display = 'none';
     document.getElementById('pinError').textContent = '';
     document.getElementById('adminPinModal').classList.add('active');
-    setTimeout(() => {
-      const inp = document.getElementById('loginNameInput');
-      if (inp) {
-        inp.focus();
-        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') loginByName(); });
-      }
-    }, 100);
     return;
   }
   clearPinInputs();
@@ -1965,34 +1971,18 @@ function toggleAdmin() {
   setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
 }
 
-// Login by typed name
-window.loginByName = function() {
-  const inp = document.getElementById('loginNameInput');
-  const name = inp ? inp.value.trim() : '';
-  if (!name) return;
-  const err = document.getElementById('pinError');
-  const ownerName = data.admin.ownerName || '';
-  const mods = getMods();
-  if (name.toLowerCase() === ownerName.toLowerCase()) { startOwnerLogin(); return; }
-  const mod = mods.find(m => m.name.toLowerCase() === name.toLowerCase());
-  if (mod) { startModLogin(mod.name); return; }
-  const player = data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
-  if (player) {
-    if (player.pinHash) { startPlayerLogin(player.name); }
-    else {
-      pendingModName = player.name;
-      adminPinMode = 'player-setup';
-      document.getElementById('adminPinTitle').textContent = '🔑 Set Your PIN';
-      document.getElementById('adminPinMsg').textContent = 'Welcome ' + player.name + '! Create a 6-digit PIN to access your scores.';
-      document.getElementById('pinResetOption').style.display = 'none';
-      document.querySelector('.pin-row').style.display = 'flex';
-      document.querySelector('.modal-actions').style.display = 'flex';
-      clearPinInputs(); err.textContent = '';
-      setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
-    }
-    return;
-  }
-  err.textContent = '"' + name + '" not found. Ask the admin to add you.';
+// First-time player PIN setup from dropdown
+window.startPlayerSetup = function(name) {
+  pendingModName = name;
+  adminPinMode = 'player-setup';
+  document.getElementById('adminPinTitle').textContent = '🔑 Set Your PIN';
+  document.getElementById('adminPinMsg').textContent = 'Welcome ' + name + '! Create a 6-digit PIN to access your scores.';
+  document.getElementById('pinResetOption').style.display = 'none';
+  document.querySelector('.pin-row').style.display = 'flex';
+  document.querySelector('.modal-actions').style.display = 'flex';
+  clearPinInputs();
+  document.getElementById('pinError').textContent = '';
+  setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
 };
 
 window.startOwnerLogin = function() {
@@ -2160,8 +2150,9 @@ window.submitPin = async function() {
 
   } else if (adminPinMode === 'mod-login') {
     err.textContent = 'Verifying...';
-    const mod = getMods().find(m => m.name === pendingModName);
-    const verified = mod && await verifyPinSecure(pin, mod.pinHash);
+    // Moderators use their PLAYER PIN to login
+    const player = data.players.find(p => p.name === pendingModName);
+    const verified = player && await verifyPinSecure(pin, player.pinHash);
     if (verified) {
       adminRole = 'mod'; adminName = mod.name;
       sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'mod', name:mod.name }));
@@ -2493,17 +2484,16 @@ window.addModerator = function() {
   const sel = document.getElementById('addModSelect');
   if (!sel || !sel.value) return showToast('Select a player first');
   if (getMods().length >= 3) return showToast('Maximum 3 moderators!');
-  pendingModName = sel.value;
-  adminPinMode = 'add-mod-pin';
-  document.getElementById('adminPinTitle').textContent = '🛡️ Set Moderator PIN';
-  document.getElementById('adminPinMsg').textContent = `Set a 6-digit PIN for ${pendingModName}. Share this PIN with them privately.`;
-  document.getElementById('pinResetOption').style.display = 'none';
-  clearPinInputs();
-  document.getElementById('pinError').textContent = '';
-  document.querySelector('.pin-row').style.display = 'flex';
-  document.querySelector('.modal-actions').style.display = 'flex';
-  document.getElementById('adminPinModal').classList.add('active');
-  setTimeout(() => document.querySelector('.pin-digit[data-idx="0"]').focus(), 100);
+  const name = sel.value;
+  const player = data.players.find(p => p.name === name);
+  if (!player || !player.pinHash) return showToast('Player must set a PIN first before becoming moderator');
+  if (!confirm(`Promote ${name} to moderator?\n\nThey will use their existing player PIN to login with moderator access.`)) return;
+  const mods = getMods();
+  mods.push({ name, addedAt: new Date().toISOString() });
+  saveMods(mods);
+  logAdminAction(`Promoted "${name}" to moderator`);
+  showToast(`🛡️ ${name} is now a moderator!`);
+  renderAdminPanel();
 };
 
 window.changeBorrowLimit = function(delta) {
