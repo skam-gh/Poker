@@ -686,8 +686,10 @@ async function saveToCloud() {
       _updatedBy: 'web-app'
     });
     setTimeout(() => { suppressRemoteUpdate = false; }, 2000);
+    setConnStatus('online', '☁️ Connected to Firebase');
   } catch(e) {
     console.warn('Cloud save failed:', e);
+    setConnStatus('offline', '⚠️ Cloud save failed — data saved locally');
     suppressRemoteUpdate = false;
   }
 }
