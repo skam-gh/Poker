@@ -1877,7 +1877,15 @@ function recordFailedAttempt() {
 function resetAttempts() { loginAttempts = 0; }
 
 function getOwnerPin() { return data.admin.ownerPinHash; }
-function hasOwner() { return !!getOwnerPin(); }
+function hasOwner() { 
+  if (data.admin.ownerPinHash) return true;
+  // Check all backup locations
+  const b1 = localStorage.getItem('apc_owner_pin_backup');
+  const b2 = localStorage.getItem('apc_pin_v2');
+  if (b1) { data.admin.ownerPinHash = b1; return true; }
+  if (b2) { data.admin.ownerPinHash = b2; return true; }
+  return false;
+}
 async function verifyOwnerPin(pin) {
   const stored = getOwnerPin();
   if (!stored) return false;
@@ -2121,8 +2129,13 @@ window.submitPin = async function() {
     err.textContent = 'Setting up...';
     data.admin.ownerPinHash = await hashPinSecure(pin);
     data.admin.ownerName = name;
-    // Backup PIN hash separately so it survives data resets
+    // Backup PIN to multiple keys — belt and suspenders
     localStorage.setItem('apc_owner_pin_backup', data.admin.ownerPinHash);
+    localStorage.setItem('apc_pin_v2', data.admin.ownerPinHash);
+    // Verify save worked
+    const verify = localStorage.getItem('apc_pin_v2');
+    console.log('PIN save verified:', verify ? '✅' : '❌ LOCALSTORAGE NOT WORKING');
+    if (!verify) alert('WARNING: Your browser is blocking data storage. Settings > Privacy > allow cookies/site data for this site.');
     console.log('Owner PIN hash set:', data.admin.ownerPinHash ? '✅ ' + data.admin.ownerPinHash.substring(0,10) + '...' : '❌ FAILED');
     let player = data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
     if (!player) { player = { name, icon:'🎰', addedAt: new Date().toISOString() }; data.players.push(player); }
@@ -2193,6 +2206,7 @@ window.submitPin = async function() {
     err.textContent = 'Setting up...';
     data.admin.ownerPinHash = await hashPinSecure(pin);
     localStorage.setItem('apc_owner_pin_backup', data.admin.ownerPinHash);
+    localStorage.setItem('apc_pin_v2', data.admin.ownerPinHash);
     saveData();
     const ownerDisplayName = data.admin.ownerName || 'Owner';
     adminRole = 'owner'; adminName = ownerDisplayName;
