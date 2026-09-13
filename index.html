@@ -522,21 +522,11 @@ body::before { content:''; position:fixed; inset:0; background:radial-gradient(e
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 
 <!-- Firebase SDK via ESM CDN -->
+<script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore-compat.js"></script>
 <script type="module">
-// ─── Firebase (optional — app works offline without it) ───
-let initializeApp, getFirestore, doc, getDoc, setDoc, onSnapshot;
-try {
-  const appMod = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js');
-  const fsMod = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js');
-  initializeApp = appMod.initializeApp;
-  getFirestore = fsMod.getFirestore;
-  doc = fsMod.doc;
-  getDoc = fsMod.getDoc;
-  setDoc = fsMod.setDoc;
-  onSnapshot = fsMod.onSnapshot;
-} catch(e) {
-  console.warn('Firebase libraries failed to load — running offline:', e);
-}
+// ─── Firebase (loaded via script tags above) ───
+const firebaseCompat = typeof firebase !== 'undefined' ? firebase : null;
 
 // ══════════════════════════════════════════════════════════════
 // 🔧 FIREBASE CONFIG — REPLACE WITH YOUR OWN VALUES
@@ -587,12 +577,16 @@ let unsubFirestore = null;
 let suppressRemoteUpdate = false;
 
 try {
-  const app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-  firebaseReady = true;
-  setConnStatus('online', '☁️ Connected to Firebase');
+  if (firebaseCompat) {
+    firebaseCompat.initializeApp(firebaseConfig);
+    db = firebaseCompat.firestore();
+    firebaseReady = true;
+    setConnStatus('online', '☁️ Connected to Firebase');
+  } else {
+    setConnStatus('offline', '⚠️ Offline mode — using local storage only');
+  }
 } catch (e) {
-  console.warn('Firebase init failed, running in offline mode:', e);
+  console.warn('Firebase init failed:', e);
   setConnStatus('offline', '⚠️ Offline mode — using local storage only');
 }
 
@@ -643,6 +637,7 @@ function ensureAdmin(d) {
 }
 
 function loadLocal() {
+  // Try main storage first
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -654,7 +649,6 @@ function loadLocal() {
       if (!p.admin.auditLog) p.admin.auditLog = [];
       if (!p.settlements) p.settlements = [];
       if (!p.settings) p.settings = { borrowLimit: 1 };
-      // Recover PIN from backup if missing
       if (!p.admin.ownerPinHash) {
         const backup = localStorage.getItem('apc_owner_pin_backup');
         if (backup) p.admin.ownerPinHash = backup;
@@ -663,15 +657,39 @@ function loadLocal() {
       return p;
     }
   } catch(e) { console.warn('loadLocal error:', e); }
-  // No local data — check backup PIN
+  // Try backup storage
+  try {
+    const backup = localStorage.getItem(STORAGE_KEY + '_backup');
+    if (backup) {
+      console.warn('Main data missing — restored from backup');
+      const p = JSON.parse(backup);
+      localStorage.setItem(STORAGE_KEY, backup);
+      return p;
+    }
+  } catch(e) {}
+  // No data anywhere
   const d = defaultData();
-  const backup = localStorage.getItem('apc_owner_pin_backup');
-  if (backup) d.admin.ownerPinHash = backup;
+  const pinBackup = localStorage.getItem('apc_owner_pin_backup');
+  if (pinBackup) d.admin.ownerPinHash = pinBackup;
   d.admin.ownerName = 'Srikanth';
   return d;
 }
 
 function saveLocal() {
+  // SAFETY: never save empty data over existing data
+  const existing = localStorage.getItem(STORAGE_KEY);
+  if (existing) {
+    try {
+      const old = JSON.parse(existing);
+      const oldPlayers = (old.players || []).length;
+      const oldTxns = (old.transactions || []).length;
+      const newPlayers = (data.players || []).length;
+      const newTxns = (data.transactions || []).length;
+      // If we'd lose players or transactions, block the save
+      if (oldPlayers > 0 && newPlayers === 0) { console.error('BLOCKED: tried to save 0 players over ' + oldPlayers); return; }
+      if (oldTxns > 5 && newTxns === 0) { console.error('BLOCKED: tried to save 0 transactions over ' + oldTxns); return; }
+    } catch(e) {}
+  }
   data.lastModified = new Date().toISOString();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
@@ -680,7 +698,7 @@ async function saveToCloud() {
   if (!firebaseReady || !db) return;
   try {
     suppressRemoteUpdate = true;
-    await setDoc(doc(db, ...FIRESTORE_DOC.split('/')), {
+    await db.doc(FIRESTORE_DOC).set({
       ...data,
       lastModified: new Date().toISOString(),
       _updatedBy: 'web-app'
@@ -695,6 +713,9 @@ async function saveToCloud() {
 }
 
 function saveData() {
+  // Auto-backup current data before saving
+  const current = localStorage.getItem(STORAGE_KEY);
+  if (current) localStorage.setItem(STORAGE_KEY + '_backup', current);
   saveLocal();
   saveToCloud();
   updateBackupStatus();
@@ -703,8 +724,8 @@ function saveData() {
 async function loadFromCloud() {
   if (!firebaseReady || !db) return null;
   try {
-    const snap = await getDoc(doc(db, ...FIRESTORE_DOC.split('/')));
-    if (snap.exists()) return snap.data();
+    const snap = await db.doc(FIRESTORE_DOC).get();
+    if (snap.exists) return snap.data();
   } catch(e) {
     console.warn('Cloud load failed:', e);
   }
@@ -716,17 +737,20 @@ function listenToCloud() { /* disabled — inline listener with security checks 
 let data = loadLocal();
 ensureAdmin(data);
 
-// On startup: recover from cloud if local has no PIN, then push
+// On startup: if this is a NEW device (no local data at all), load from cloud
+// If local data exists, just push to cloud as backup
 (async () => {
-  if (!data.admin.ownerPinHash && firebaseReady) {
+  const isNewDevice = !localStorage.getItem(STORAGE_KEY) && !localStorage.getItem(STORAGE_KEY + '_backup');
+  if (isNewDevice && firebaseReady) {
     try {
       const cloud = await loadFromCloud();
-      if (cloud && cloud.admin && cloud.admin.ownerPinHash && cloud.admin.ownerName === 'Srikanth') {
+      if (cloud && cloud.admin && cloud.admin.ownerName === 'Srikanth') {
         data = cloud;
         ensureAdmin(data);
         saveLocal();
+        showToast('☁️ Data loaded from cloud');
       }
-    } catch(e) { console.warn('Cloud recovery failed:', e); }
+    } catch(e) { console.warn('Cloud load failed:', e); }
   }
   if (data.admin.ownerPinHash && firebaseReady) {
     try { await saveToCloud(); } catch(e) {}
@@ -1281,7 +1305,7 @@ function renderSettlement() {
   const pairRemaining = {};
   allPostCutoffSettlements.forEach(s => {
     const key = s.from + '→' + s.to;
-    pairRemaining[key] = (pairRemaining[key] || 0) + s.amount;
+    pairRemaining[key] = Math.round(((pairRemaining[key] || 0) + s.amount) * 100) / 100;
   });
 
   // Process sessions oldest first (to consume settlement amounts in order)
