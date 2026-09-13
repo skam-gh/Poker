@@ -1302,13 +1302,7 @@ function renderSettlement() {
   
   // Pre-compute total settlements per from→to pair (all post-cutoff)
   const allPostCutoffSettlements = allSettlements.filter(s => !cutoff || new Date(s.timestamp) > new Date(cutoff));
-  const pairRemaining = {};
-  allPostCutoffSettlements.forEach(s => {
-    const key = s.from + '→' + s.to;
-    pairRemaining[key] = Math.round(((pairRemaining[key] || 0) + s.amount) * 100) / 100;
-  });
 
-  // Process sessions oldest first (to consume settlement amounts in order)
   const sessionsOldestFirst = [...sessionDates].reverse();
   const sessionCards = {};
 
@@ -1357,18 +1351,19 @@ function renderSettlement() {
       if (wC[wi].amount < 0.01) wi++;
     }
 
-    // Check if each transfer is covered by remaining settlement amounts
+    // Match settlements FOR THIS SESSION (by date in settlement timestamp)
+    const sessionPaid = {};
+    allPostCutoffSettlements.filter(s => new Date(s.timestamp).toDateString() === sessionDate).forEach(s => {
+      const key = s.from + '→' + s.to;
+      sessionPaid[key] = Math.round(((sessionPaid[key] || 0) + s.amount) * 100) / 100;
+    });
+
     let sessionSettled = true;
     let tHtml = '';
     transfers.forEach(t => {
       const key = t.from + '→' + t.to;
-      const remaining = pairRemaining[key] || 0;
-      const isPaid = remaining >= t.amount - 0.01;
-      if (isPaid) {
-        pairRemaining[key] = Math.round((remaining - t.amount) * 100) / 100;
-      } else {
-        sessionSettled = false;
-      }
+      const paid = sessionPaid[key] || 0;
+      const isPaid = paid >= t.amount - 0.01;
       if (!isPaid) sessionSettled = false;
       const rowStyle = isPaid ? ' style="opacity:0.4"' : '';
       const badge = isPaid ? ' <span style="color:var(--green);font-size:0.78rem;font-weight:600">✓ Paid</span>' : '';
