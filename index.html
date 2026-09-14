@@ -707,7 +707,8 @@ async function saveToCloud() {
     setConnStatus('online', '☁️ Connected to Firebase');
   } catch(e) {
     console.warn('Cloud save failed:', e);
-    setConnStatus('offline', '⚠️ Cloud save failed — data saved locally');
+    setConnStatus('offline', '⚠️ Cloud save failed');
+    showToast('⚠️ Cloud save failed — check Firestore rules');
     suppressRemoteUpdate = false;
   }
 }
@@ -737,18 +738,17 @@ function listenToCloud() { /* disabled — inline listener with security checks 
 let data = loadLocal();
 ensureAdmin(data);
 
-// On startup: if this is a NEW device (no local data at all), load from cloud
-// If local data exists, just push to cloud as backup
+// On startup: load from cloud if local data is empty/default
 (async () => {
-  const isNewDevice = !localStorage.getItem(STORAGE_KEY) && !localStorage.getItem(STORAGE_KEY + '_backup');
-  if (isNewDevice && firebaseReady) {
+  const hasLocalData = data.transactions && data.transactions.length > 0;
+  if (!hasLocalData && firebaseReady) {
     try {
       const cloud = await loadFromCloud();
-      if (cloud && cloud.admin && cloud.admin.ownerName === 'Srikanth') {
+      if (cloud && cloud.players && cloud.players.length > 0) {
         data = cloud;
         ensureAdmin(data);
         saveLocal();
-        showToast('☁️ Data loaded from cloud');
+        showToast('☁️ Data loaded from cloud — ' + data.players.length + ' players, ' + data.transactions.length + ' transactions');
       }
     } catch(e) { console.warn('Cloud load failed:', e); }
   }
