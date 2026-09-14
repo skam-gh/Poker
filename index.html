@@ -738,7 +738,7 @@ function listenToCloud() { /* disabled — inline listener with security checks 
 let data = loadLocal();
 ensureAdmin(data);
 
-// On startup: load from cloud if local data is empty/default
+// On startup: load from cloud if local data is empty/default. NEVER push on startup.
 (async () => {
   const hasLocalData = data.transactions && data.transactions.length > 0;
   if (!hasLocalData && firebaseReady) {
@@ -748,12 +748,9 @@ ensureAdmin(data);
         data = cloud;
         ensureAdmin(data);
         saveLocal();
-        showToast('☁️ Data loaded from cloud — ' + data.players.length + ' players, ' + data.transactions.length + ' transactions');
+        showToast('☁️ Loaded ' + data.players.length + ' players, ' + data.transactions.length + ' transactions from cloud');
       }
     } catch(e) { console.warn('Cloud load failed:', e); }
-  }
-  if (data.admin.ownerPinHash && firebaseReady) {
-    try { await saveToCloud(); } catch(e) {}
   }
   refreshUI();
 })();
