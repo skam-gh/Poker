@@ -738,19 +738,23 @@ function listenToCloud() { /* disabled — inline listener with security checks 
 let data = loadLocal();
 ensureAdmin(data);
 
-// On startup: load from cloud if local data is empty/default. NEVER push on startup.
+// On startup: sync with cloud smartly
 (async () => {
-  const hasLocalData = data.transactions && data.transactions.length > 0;
-  if (!hasLocalData && firebaseReady) {
+  if (firebaseReady) {
     try {
       const cloud = await loadFromCloud();
       if (cloud && cloud.players && cloud.players.length > 0) {
-        data = cloud;
-        ensureAdmin(data);
-        saveLocal();
-        showToast('☁️ Loaded ' + data.players.length + ' players, ' + data.transactions.length + ' transactions from cloud');
+        const cloudTxns = (cloud.transactions || []).length;
+        const localTxns = (data.transactions || []).length;
+        const cloudNewer = cloud.lastModified && (!data.lastModified || cloud.lastModified > data.lastModified);
+        // Load from cloud if: more transactions OR newer timestamp
+        if (cloudTxns > localTxns || (cloudNewer && cloudTxns >= localTxns)) {
+          data = cloud;
+          ensureAdmin(data);
+          saveLocal();
+        }
       }
-    } catch(e) { console.warn('Cloud load failed:', e); }
+    } catch(e) { console.warn('Cloud sync failed:', e); }
   }
   refreshUI();
 })();
