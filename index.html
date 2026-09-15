@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0c0f14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Poker Club">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230c0f14'/><text x='50' y='65' text-anchor='middle' font-size='60'>🃏</text></svg>">
+<link rel="manifest" href="manifest.json">
 <title>Almere Poker Club</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -631,7 +637,10 @@ function ensureAdmin(d) {
   }
   const sr = d.players.find(p => p.name === 'Srikanth');
   if (sr) sr.email = 'vsramja@gmail.com';
-  d.players.forEach(p => { delete p.phone; });
+  d.players.forEach(p => { 
+    delete p.phone;
+    if (p.pinHash && p.pinHash.startsWith('v4_')) delete p.pinHash;
+  });
   if (!d.settlementCutoff) d.settlementCutoff = '2026-05-22T23:59:59.000Z';
   return d;
 }
@@ -2708,6 +2717,11 @@ window.requireAdmin = requireAdmin;
 window.requireOwner = requireOwner;
 window.setupPlayerPin = window.setupPlayerPin;
 window.adminResetPlayerPin = window.adminResetPlayerPin;
+
+// Register service worker for PWA install
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/Poker/sw.js').catch(() => {});
+}
 
 </script>
 </body>
