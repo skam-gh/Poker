@@ -744,6 +744,40 @@ async function loadFromCloud() {
 
 function listenToCloud() { /* disabled — inline listener with security checks */ }
 
+// Pull the latest PINs + moderator list from the cloud (read-only, local save only).
+// Lets a player/moderator log in with a PIN the owner set on another device,
+// even if this page was already open. Returns true if anything changed.
+async function refreshPinsFromCloud() {
+  if (!firebaseReady || !db) return false;
+  try {
+    const cloud = await loadFromCloud();
+    if (!cloud || !Array.isArray(cloud.players) || cloud.players.length === 0) return false;
+    // Only trust the cloud copy if it is at least as new as ours (avoids undoing a change still uploading)
+    if (!cloud.lastModified || (data.lastModified && cloud.lastModified < data.lastModified)) return false;
+    let changed = false;
+    data.players.forEach(p => {
+      const cp = cloud.players.find(c => c.name === p.name);
+      if (!cp) return;
+      const cloudHash = (cp.pinHash && !String(cp.pinHash).startsWith('v4_')) ? cp.pinHash : undefined;
+      if (cloudHash !== p.pinHash) {
+        if (cloudHash) p.pinHash = cloudHash; else delete p.pinHash;
+        changed = true;
+      }
+    });
+    if (cloud.admin && Array.isArray(cloud.admin.mods)) {
+      const cloudMods = cloud.admin.mods.filter(m => m && m.name && m.name !== 'Hari');
+      const a = cloudMods.map(m => m.name).sort().join('|');
+      const b = (data.admin.mods || []).map(m => m.name).sort().join('|');
+      if (a !== b) { data.admin.mods = cloudMods; changed = true; }
+    }
+    if (changed) saveLocal();
+    return changed;
+  } catch (e) {
+    console.warn('PIN refresh failed:', e);
+    return false;
+  }
+}
+
 let data = loadLocal();
 ensureAdmin(data);
 
@@ -1895,7 +1929,7 @@ function logAdminAction(action) {
   saveData();
 }
 
-function toggleAdmin() {
+function toggleAdmin(skipCloudRefresh) {
   if (isAdminAny() || adminRole === 'player') {
     adminRole = null; adminName = null;
     sessionStorage.removeItem(ADMIN_SESSION_KEY);
@@ -1934,7 +1968,15 @@ function toggleAdmin() {
     let msg = '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;max-height:320px;overflow-y:auto">';
     msg += `<div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:4px 0">Admin</div>`;
     msg += `<button class="btn btn-primary" onclick="startOwnerLogin()" style="width:100%">👑 ${data.admin.ownerName || 'Owner'}</button>`;
-    mods.forEach(m => { msg += `<button class="btn btn-outline" onclick="startModLogin('${m.name.replace(/'/g,"\\'")}')" style="width:100%">🛡️ ${m.name}</button>`; });
+    mods.forEach(m => {
+      const modPlayer = data.players.find(p => p.name === m.name);
+      if (modPlayer && !modPlayer.pinHash) {
+        // PIN was reset — moderators have write access, so only the owner may set their new PIN (Admin › Player PINs)
+        msg += `<button class="btn btn-outline" disabled style="width:100%;opacity:0.55;cursor:not-allowed">🛡️ ${m.name} <span style="font-size:0.7rem;color:var(--text-muted)">(PIN reset — ask the owner)</span></button>`;
+      } else {
+        msg += `<button class="btn btn-outline" onclick="startModLogin('${m.name.replace(/'/g,"\\'")}')" style="width:100%">🛡️ ${m.name}</button>`;
+      }
+    });
     if (allPlayers.length > 0) {
       msg += `<div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:8px 0 4px;border-top:1px solid var(--border);margin-top:4px">Players</div>`;
       allPlayers.forEach(p => {
@@ -1952,6 +1994,12 @@ function toggleAdmin() {
     document.querySelector('.modal-actions').style.display = 'none';
     document.getElementById('pinError').textContent = '';
     document.getElementById('adminPinModal').classList.add('active');
+    // Fetch the latest PINs in the background; redraw the list if they changed
+    if (!skipCloudRefresh) {
+      refreshPinsFromCloud().then(changed => {
+        if (changed && adminPinMode === 'choose-role' && !isLoggedIn()) toggleAdmin(true);
+      });
+    }
     return;
   }
   clearPinInputs();
@@ -2147,14 +2195,18 @@ window.submitPin = function() {
   } else if (adminPinMode === 'mod-login') {
     err.textContent = 'Verifying...';
     // Moderators use their PLAYER PIN to login
-    const player = data.players.find(p => p.name === pendingModName);
-    const verified = player && hashPin(pin, 'player_' + pendingModName) === player.pinHash;
+    const modName = pendingModName;
+    const isStillMod = getMods().some(m => m.name === modName);
+    const player = data.players.find(p => p.name === modName);
+    if (!isStillMod) { err.textContent = modName + ' is no longer a moderator.'; clearPinInputs(); return; }
+    if (player && !player.pinHash) { err.textContent = 'No PIN set for ' + modName + ' yet. Ask the owner to set one.'; clearPinInputs(); return; }
+    const verified = player && hashPin(pin, 'player_' + modName) === player.pinHash;
     if (verified) {
-      adminRole = 'mod'; adminName = mod.name;
-      sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'mod', name:mod.name }));
-      logAdminAction(`Moderator "${mod.name}" logged in`);
+      adminRole = 'mod'; adminName = modName;
+      sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'mod', name:modName }));
+      logAdminAction(`Moderator "${modName}" logged in`);
       cancelAdminPin(); refreshUI(); renderHistory();
-      showToast(`🛡️ Welcome, ${mod.name}!`);
+      showToast(`🛡️ Welcome, ${modName}!`);
       resetAttempts();
     } else { recordFailedAttempt(); err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
 
@@ -2195,22 +2247,25 @@ window.submitPin = function() {
         const email = emailInput ? emailInput.value.trim() : '';
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Invalid email format.'; emailInput && emailInput.focus(); return; }
       err.textContent = 'Setting up...';
-      player.pinHash = hashPin(pin, 'player_' + pendingModName);
-        if (email) player.email = email;
+      const setupName = pendingModName;
+      player.pinHash = hashPin(pin, 'player_' + setupName);
+      if (email) player.email = email;
       saveData();
       cancelAdminPin(); renderPlayers();
-      showToast(`🔑 PIN set for ${pendingModName}!`);
+      if (typeof renderAdminPanel === 'function' && isOwner()) renderAdminPanel();
+      showToast(`🔑 PIN set for ${setupName}!`);
     }
 
   } else if (adminPinMode === 'player-login') {
     err.textContent = 'Verifying...';
-    const player = data.players.find(p => p.name === pendingModName);
-    const verified = player && hashPin(pin, 'player_' + pendingModName) === player.pinHash;
+    const playerName = pendingModName;
+    const player = data.players.find(p => p.name === playerName);
+    const verified = player && hashPin(pin, 'player_' + playerName) === player.pinHash;
     if (verified) {
-      adminRole = 'player'; adminName = pendingModName;
-      sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'player', name:pendingModName }));
+      adminRole = 'player'; adminName = playerName;
+      sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ role:'player', name:playerName }));
       cancelAdminPin(); refreshUI(); renderHistory();
-      showToast(`🎰 Welcome, ${pendingModName}!`);
+      showToast(`🎰 Welcome, ${playerName}!`);
       resetAttempts();
     } else { recordFailedAttempt(); err.textContent = 'Wrong PIN.'; clearPinInputs(); document.querySelector('.pin-digit[data-idx="0"]').focus(); }
 
@@ -2247,6 +2302,19 @@ window.submitPin = function() {
       clearPinInputs();
       document.querySelector('.pin-digit[data-idx="0"]').focus();
     }
+  }
+};
+
+// Safety net: if anything in the PIN flow throws, show a message instead of hanging on "Verifying..."
+const _submitPinInner = window.submitPin;
+window.submitPin = function() {
+  try {
+    _submitPinInner();
+  } catch (e) {
+    console.error('PIN submit error:', e);
+    const err = document.getElementById('pinError');
+    if (err) err.textContent = 'Something went wrong — please try again.';
+    clearPinInputs();
   }
 };
 
