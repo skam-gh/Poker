@@ -1733,7 +1733,7 @@ function updateStats() {
   el.style.color = out > 0 ? 'var(--red)' : out < 0 ? 'var(--green)' : 'var(--text)';
 }
 
-// ─── Leaderboard score: nights played + fewer buy-ins + winnings (each counts a third) ───
+// ─── Leaderboard score: sessions played + nights won + fewer buy-ins + winnings (each counts a quarter) ───
 function computeLeaderboardScores(d) {
   const playerNames = new Set((d.players || []).map(p => p.name));
   const game = (d.transactions || []).filter(t =>
@@ -1771,25 +1771,28 @@ function computeLeaderboardScores(d) {
 
   const scores = {};
   (d.players || []).forEach(p => {
-    let played = 0, net = 0, units = 0;
+    let played = 0, won = 0, net = 0, units = 0;
     nights.forEach(n => {
       const rec = n.players.get(p.name);
       if (!rec) return;
       played++;
-      net += rec.r - rec.b;
+      const x = rec.r - rec.b;
+      net += x;
+      if (x > 0.005) won++;
       units += Math.max(1, rec.b / n.stdBuyIn); // a cash-out with no recorded buy-in still counts as one buy-in
     });
-    if (!played) { scores[p.name] = { played: 0, nights: N, net: 0, buyIns: 0, score: 0 }; return; }
+    if (!played) { scores[p.name] = { played: 0, won: 0, nights: N, net: 0, buyIns: 0, score: 0 }; return; }
     const buyIns = units / played;
     const avgNet = net / played;
     const settle = f => 0.5 + (f - 0.5) * played / (played + K);
     const factors = {
-      nightsPlayed: played / N,                                   // share of club nights played
+      sessionsPlayed: played / N,                                 // share of club nights played
+      nightsWon: settle(won / played),                            // share of their nights finished up
       fewerBuyIns: settle(clamp(2 - buyIns)),                     // 1 buy-in a night = full marks, 2+ = none
       winnings: settle(clamp(0.5 + avgNet / avgStd))              // averaging +half a buy-in a night = full marks, -half = none
     };
-    const score = Math.round(100 * (factors.nightsPlayed + factors.fewerBuyIns + factors.winnings) / 3);
-    scores[p.name] = { played, nights: N, net, buyIns, avgNet, factors, score };
+    const score = Math.round(100 * (factors.sessionsPlayed + factors.nightsWon + factors.fewerBuyIns + factors.winnings) / 4);
+    scores[p.name] = { played, won, nights: N, net, buyIns, avgNet, factors, score };
   });
   return scores;
 }
@@ -1828,18 +1831,18 @@ function renderStats() {
     return { name: p.name, icon: p.icon || '🎰', totalBorrowed, totalReturned, profit, borrowCount: borrows.length, returnCount: returns.length, sessions, sessionsWon, winRate, avgBorrow, avgProfit, lastActive };
   });
 
-  // ── Leaderboard (ranked by nights played + fewer buy-ins + winnings, each a third) ──
+  // ── Leaderboard (ranked by sessions played + nights won + fewer buy-ins + winnings, each a quarter) ──
   const lbScores = computeLeaderboardScores(data);
   const scoreOf = name => (lbScores[name] && lbScores[name].score) || 0;
   const sorted = [...playerData].sort((a,b) => scoreOf(b.name) - scoreOf(a.name) || b.profit - a.profit);
   const medals = ['🥇','🥈','🥉'];
-  let lbHtml = '<div class="lb-note">Ranked on three things, each counting a third: nights played, fewer buy-ins a night, and average winnings a night. Players with only a few nights sit nearer the middle until they\'ve played more.</div>';
+  let lbHtml = '<div class="lb-note">Ranked on four things, each counting a quarter: sessions played, share of nights won, fewer buy-ins a night, and average winnings a night. Players with only a few sessions sit nearer the middle until they\'ve played more.</div>';
   sorted.forEach((p, i) => {
     const sc = lbScores[p.name] || { played: 0, nights: 0, buyIns: 0, score: 0 };
     const rank = i < 3 ? medals[i] : `<span style="color:var(--text-muted);font-size:0.9rem">${i+1}</span>`;
     const amtColor = p.profit > 0 ? 'var(--green)' : p.profit < 0 ? 'var(--red)' : 'var(--text-dim)';
     const amtText = p.profit > 0 ? `+${formatCurrency(p.profit)}` : p.profit < 0 ? `-${formatCurrency(Math.abs(p.profit))}` : formatCurrency(0);
-    const meta = sc.played ? `<span>${sc.played}/${sc.nights} nights</span> · <span>${sc.buyIns.toFixed(1)} buy-ins/night</span>` : 'No games yet';
+    const meta = sc.played ? `<span>${sc.played}/${sc.nights} played</span> · <span>${sc.won} won</span> · <span>${sc.buyIns.toFixed(1)} buy-ins/night</span>` : 'No games yet';
     lbHtml += `<div class="leaderboard-row ${i < 3 ? 'rank-'+(i+1) : ''}">
       <span class="lb-rank">${rank}</span>
       <span class="lb-name"><span class="lb-player">${p.icon} ${p.name}</span><span class="lb-meta">${meta}</span></span>
